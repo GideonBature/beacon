@@ -5,12 +5,14 @@ members = [
     "crates/beacon-events",
     "crates/beacon-mock",
     "crates/beacon-cli",
+    "crates/beacon-groth16",
 ]
 default-members = [
     "crates/beacon-core",
     "crates/beacon-events",
     "crates/beacon-mock",
     "crates/beacon-cli",
+    "crates/beacon-groth16",
 ]
 
 [workspace.package]

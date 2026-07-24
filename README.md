@@ -48,7 +48,8 @@ beacon/
 │   ├── beacon-core      # protocol types/traits + Engine
 │   ├── beacon-events    # RFC-0003 lifecycle events
 │   ├── beacon-mock      # in-memory backend + examples
-│   └── beacon-cli       # developer CLI
+│   ├── beacon-cli       # developer CLI
+│   └── beacon-groth16   # Groth16 Verifiable adapter (verify-only)
 └── examples/
 ```
 
@@ -58,6 +59,7 @@ cargo run -p beacon-mock --example lifecycle
 cargo run -p beacon-mock --example challenge
 cargo run -p beacon-cli -- demo accept
 cargo run -p beacon-cli -- demo reject
+cargo run -p beacon-groth16 --example lifecycle_groth16
 ```
 
 No Cube in this repository. Cube will import Beacon.

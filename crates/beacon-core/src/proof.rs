@@ -1,8 +1,7 @@
 //! Proof / evidence boundary.
 //!
 //! Named proof systems (Groth16, SP1, …) must not appear in Backend APIs.
-//! Concrete evidence types will implement [`Verifiable`] in a later commit.
-//! This module exists so the crate layout matches the intended protocol surface.
+//! Concrete evidence types implement [`Verifiable`] (see `beacon-groth16`).
 
 /// Evidence a backend can check without knowing which proof system produced it.
 ///
