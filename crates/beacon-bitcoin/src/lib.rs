@@ -7,10 +7,13 @@
 //!
 //! | Protocol step | Journal entry |
 //! |---------------|---------------|
-//! | `assert` | [`TxKind::Assert`] |
+//! | `assert` | [`TxKind::Assert`] (locktime = challenge deadline) |
 //! | `challenge` | [`TxKind::Challenge`] (+ [`TxKind::Disprove`] if evidence fails) |
 //! | `finalize` → Accepted | [`TxKind::Withdraw`] |
 //! | `finalize` → Rejected | [`TxKind::Punish`] |
+//!
+//! Each entry carries a deterministic [`Txid`], optional locktime, and a
+//! `prev_txid` link so the journal forms a simple transaction graph.
 //!
 //! # What this is not
 //!
@@ -24,6 +27,8 @@
 
 #![forbid(unsafe_code)]
 
+mod tx;
+
 use beacon_core::{
     AssertionId, BackendId, ChallengerId, Deadline, DisputeBackend, Instant, Result, Settlement,
     Verifiable,
@@ -31,31 +36,7 @@ use beacon_core::{
 use beacon_events::{ChallengeResult, Event, RecordingSink};
 use beacon_mock::{AssertionView, MockBackend, MockConfig};
 
-/// Kind of simulated Bitcoin transaction (RFC-0006 mapping).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum TxKind {
-    /// Assertion / commit broadcast.
-    Assert,
-    /// Challenge opened on-chain.
-    Challenge,
-    /// Disprove / fraud path (challenger showed invalid evidence).
-    Disprove,
-    /// Timeout / withdraw after accepted settlement.
-    Withdraw,
-    /// Punishment finalization after rejected settlement.
-    Punish,
-}
-
-/// One simulated chain action tied to an assertion.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SimulatedTx {
-    /// Transaction role in the dispute graph.
-    pub kind: TxKind,
-    /// Assertion this action belongs to.
-    pub assertion_id: AssertionId,
-    /// Monotonic simulated tx index (stand-in for txid ordering).
-    pub index: u64,
-}
+pub use tx::{SimulatedTx, TxKind, Txid};
 
 /// Bitcoin-shaped backend: mock lifecycle + transaction journal.
 pub struct BitcoinBackend<E, S = RecordingSink> {
@@ -127,14 +108,29 @@ impl<E, S> BitcoinBackend<E, S> {
         &self.journal
     }
 
-    fn push_tx(&mut self, kind: TxKind, assertion_id: AssertionId) {
+    /// Last journal txid for `assertion_id`, if any.
+    #[must_use]
+    pub fn tip_txid(&self, assertion_id: AssertionId) -> Option<Txid> {
+        self.journal
+            .iter()
+            .rev()
+            .find(|tx| tx.assertion_id == assertion_id)
+            .map(|tx| tx.txid)
+    }
+
+    fn push_tx(
+        &mut self,
+        kind: TxKind,
+        assertion_id: AssertionId,
+        locktime: Option<Instant>,
+    ) -> Txid {
         let index = self.next_index;
         self.next_index = self.next_index.saturating_add(1);
-        self.journal.push(SimulatedTx {
-            kind,
-            assertion_id,
-            index,
-        });
+        let prev_txid = self.tip_txid(assertion_id);
+        let tx = SimulatedTx::new(kind, assertion_id, index, locktime, prev_txid);
+        let txid = tx.txid;
+        self.journal.push(tx);
+        txid
     }
 }
 
@@ -151,17 +147,18 @@ impl<E: Verifiable, S: beacon_events::EventSink> DisputeBackend for BitcoinBacke
 
     fn assert(&mut self, evidence: Self::Evidence, deadline: Deadline) -> Result<AssertionId> {
         let id = self.mock.assert(evidence, deadline)?;
-        self.push_tx(TxKind::Assert, id);
+        self.push_tx(TxKind::Assert, id, Some(deadline.instant()));
         Ok(id)
     }
 
     fn challenge(&mut self, assertion: AssertionId, challenger: ChallengerId) -> Result<()> {
         self.mock.challenge(assertion, challenger)?;
-        self.push_tx(TxKind::Challenge, assertion);
+        let locktime = self.mock.get(assertion).map(|v| v.deadline.instant());
+        self.push_tx(TxKind::Challenge, assertion, locktime);
         if self.mock.get(assertion).and_then(|v| v.challenge_result)
             == Some(ChallengeResult::Disproven)
         {
-            self.push_tx(TxKind::Disprove, assertion);
+            self.push_tx(TxKind::Disprove, assertion, None);
         }
         Ok(())
     }
@@ -169,8 +166,12 @@ impl<E: Verifiable, S: beacon_events::EventSink> DisputeBackend for BitcoinBacke
     fn finalize(&mut self, assertion: AssertionId) -> Result<Settlement> {
         let settlement = self.mock.finalize(assertion)?;
         match settlement.outcome {
-            beacon_core::Outcome::Accepted => self.push_tx(TxKind::Withdraw, assertion),
-            beacon_core::Outcome::Rejected => self.push_tx(TxKind::Punish, assertion),
+            beacon_core::Outcome::Accepted => {
+                self.push_tx(TxKind::Withdraw, assertion, None);
+            }
+            beacon_core::Outcome::Rejected => {
+                self.push_tx(TxKind::Punish, assertion, None);
+            }
         }
         Ok(settlement)
     }
@@ -193,22 +194,22 @@ mod tests {
             .assert(MockEvidence::valid("root"), Deadline::from_raw(10))
             .unwrap();
 
-        assert_eq!(
-            engine.backend().journal(),
-            &[SimulatedTx {
-                kind: TxKind::Assert,
-                assertion_id: id,
-                index: 0,
-            }]
-        );
+        let journal = engine.backend().journal();
+        assert_eq!(journal.len(), 1);
+        assert_eq!(journal[0].kind, TxKind::Assert);
+        assert_eq!(journal[0].assertion_id, id);
+        assert_eq!(journal[0].locktime, Some(Instant::new(10)));
+        assert!(journal[0].prev_txid.is_none());
 
         assert_eq!(engine.finalize(id), Err(Error::DisputePending));
         engine.backend_mut().set_now(Instant::new(10));
         let settlement = engine.finalize(id).unwrap();
         assert!(settlement.is_accepted());
 
-        let kinds: Vec<_> = engine.backend().journal().iter().map(|t| t.kind).collect();
-        assert_eq!(kinds, vec![TxKind::Assert, TxKind::Withdraw]);
+        let journal = engine.backend().journal();
+        assert_eq!(journal[1].kind, TxKind::Withdraw);
+        assert_eq!(journal[1].prev_txid, Some(journal[0].txid));
+        assert_ne!(journal[0].txid, journal[1].txid);
         assert_eq!(
             engine.backend().get(id).unwrap().state,
             AssertionState::Accepted
@@ -235,6 +236,11 @@ mod tests {
                 TxKind::Punish,
             ]
         );
+        // Graph links: each tx points at the previous tip for this assertion.
+        let j = engine.backend().journal();
+        assert_eq!(j[1].prev_txid, Some(j[0].txid));
+        assert_eq!(j[2].prev_txid, Some(j[1].txid));
+        assert_eq!(j[3].prev_txid, Some(j[2].txid));
     }
 
     #[test]

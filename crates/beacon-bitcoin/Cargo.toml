@@ -14,3 +14,8 @@ workspace = true
 beacon-core = { path = "../beacon-core" }
 beacon-events = { path = "../beacon-events" }
 beacon-mock = { path = "../beacon-mock" }
+sha2 = "0.10"
+
+[dev-dependencies]
+beacon-groth16 = { path = "../beacon-groth16" }
+ark-bn254 = "0.6"

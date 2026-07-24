@@ -27,6 +27,12 @@ Bitcoin `DisputeBackend` realizes it.
 | T2 / T5 Accepted | `Withdraw` |
 | T4 Rejected | `Punish` |
 
+Each journal entry includes:
+
+- `txid` — deterministic 32-byte simulated id
+- `locktime` — challenge deadline on `Assert` / `Challenge`
+- `prev_txid` — prior tip for the same assertion (simple tx graph)
+
 No real Bitcoin, scripts, or BitVM3 yet.
 
 ## Non-goals (still)
