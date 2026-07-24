@@ -1,13 +1,15 @@
 //! Simulated transaction templates and identifiers (RFC-0006 mapping).
 //!
 //! These are **not** real Bitcoin transactions. They capture the fields a future
-//! on-chain backend will need (kind, assertion binding, timelock, txid) so the
-//! journal is structurally closer to a transaction graph.
+//! on-chain backend will need (kind, assertion binding, timelock, txid, script
+//! intent) so the journal is structurally closer to a transaction graph.
 
 use core::fmt;
 
 use beacon_core::{AssertionId, Instant};
 use sha2::{Digest, Sha256};
+
+use crate::template::TxTemplate;
 
 /// 32-byte simulated transaction id (double-SHA256 stand-in).
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -102,18 +104,17 @@ pub struct SimulatedTx {
     pub locktime: Option<Instant>,
     /// Previous journal txid this action spends/extends, if any.
     pub prev_txid: Option<Txid>,
+    /// Structured template a real backend would compile to Script/PSBT.
+    pub template: TxTemplate,
 }
 
 impl SimulatedTx {
-    /// Build a journal entry and derive its txid.
+    /// Build a journal entry from a template and derive its txid.
     #[must_use]
-    pub fn new(
-        kind: TxKind,
-        assertion_id: AssertionId,
-        index: u64,
-        locktime: Option<Instant>,
-        prev_txid: Option<Txid>,
-    ) -> Self {
+    pub fn from_template(index: u64, locktime: Option<Instant>, template: TxTemplate) -> Self {
+        let kind = template.intent.tx_kind();
+        let assertion_id = template.assertion_id;
+        let prev_txid = template.spends;
         let txid = Txid::derive(kind, assertion_id, index, locktime, prev_txid);
         Self {
             kind,
@@ -122,6 +123,7 @@ impl SimulatedTx {
             txid,
             locktime,
             prev_txid,
+            template,
         }
     }
 }

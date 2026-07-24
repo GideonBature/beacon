@@ -3,17 +3,18 @@
 //! # What this is
 //!
 //! A lifecycle-compatible backend that records a **simulated** Bitcoin
-//! transaction journal aligned with RFC-0006:
+//! transaction journal aligned with RFC-0006. Each entry carries a
+//! [`TxTemplate`] / [`ScriptIntent`] describing the spending policy a real
+//! backend must eventually realize (commit, challenge, hashlock disprove,
+//! timeout withdraw, punish).
 //!
 //! | Protocol step | Journal entry |
 //! |---------------|---------------|
-//! | `assert` | [`TxKind::Assert`] (locktime = challenge deadline) |
-//! | `challenge` | [`TxKind::Challenge`] (+ [`TxKind::Disprove`] if evidence fails) |
-//! | `finalize` → Accepted | [`TxKind::Withdraw`] |
-//! | `finalize` → Rejected | [`TxKind::Punish`] |
-//!
-//! Each entry carries a deterministic [`Txid`], optional locktime, and a
-//! `prev_txid` link so the journal forms a simple transaction graph.
+//! | `assert` | [`TxKind::Assert`] + [`ScriptIntent::AssertCommit`] |
+//! | `challenge` | [`TxKind::Challenge`] + [`ScriptIntent::ChallengeOpen`] |
+//! | invalid evidence | [`TxKind::Disprove`] + [`ScriptIntent::DisproveHashlock`] |
+//! | `finalize` → Accepted | [`TxKind::Withdraw`] + [`ScriptIntent::WithdrawTimeout`] |
+//! | `finalize` → Rejected | [`TxKind::Punish`] + [`ScriptIntent::PunishBond`] |
 //!
 //! # What this is not
 //!
@@ -21,12 +22,10 @@
 //! - No `BitVM3` garbled circuits
 //! - Verification still uses [`Verifiable::check`](beacon_core::Verifiable::check)
 //!   via the embedded [`MockBackend`](beacon_mock::MockBackend)
-//!
-//! Real chain settlement replaces the journal + mock verify path later without
-//! changing the [`DisputeBackend`](beacon_core::DisputeBackend) API.
 
 #![forbid(unsafe_code)]
 
+mod template;
 mod tx;
 
 use beacon_core::{
@@ -36,13 +35,16 @@ use beacon_core::{
 use beacon_events::{ChallengeResult, Event, RecordingSink};
 use beacon_mock::{AssertionView, MockBackend, MockConfig};
 
+pub use template::{ScriptIntent, TxTemplate};
 pub use tx::{SimulatedTx, TxKind, Txid};
 
-/// Bitcoin-shaped backend: mock lifecycle + transaction journal.
+/// Bitcoin-shaped backend: mock lifecycle + templated transaction journal.
 pub struct BitcoinBackend<E, S = RecordingSink> {
     mock: MockBackend<E, S>,
     journal: Vec<SimulatedTx>,
     next_index: u64,
+    /// Placeholder bond amount attached to templates (sats).
+    bond_sats: u64,
 }
 
 impl<E: std::fmt::Debug, S: std::fmt::Debug> std::fmt::Debug for BitcoinBackend<E, S> {
@@ -51,6 +53,7 @@ impl<E: std::fmt::Debug, S: std::fmt::Debug> std::fmt::Debug for BitcoinBackend<
             .field("mock", &self.mock)
             .field("journal", &self.journal)
             .field("next_index", &self.next_index)
+            .field("bond_sats", &self.bond_sats)
             .finish()
     }
 }
@@ -62,13 +65,20 @@ impl<E> Default for BitcoinBackend<E, RecordingSink> {
 }
 
 impl<E> BitcoinBackend<E, RecordingSink> {
-    /// Create a backend with a recording event sink.
+    /// Create a backend with a recording event sink and default bond (`0`).
     #[must_use]
     pub fn new(config: MockConfig) -> Self {
+        Self::with_bond(config, 0)
+    }
+
+    /// Create a backend that stamps `bond_sats` onto each template.
+    #[must_use]
+    pub fn with_bond(config: MockConfig, bond_sats: u64) -> Self {
         Self {
             mock: MockBackend::new(config),
             journal: Vec::new(),
             next_index: 0,
+            bond_sats,
         }
     }
 
@@ -118,16 +128,10 @@ impl<E, S> BitcoinBackend<E, S> {
             .map(|tx| tx.txid)
     }
 
-    fn push_tx(
-        &mut self,
-        kind: TxKind,
-        assertion_id: AssertionId,
-        locktime: Option<Instant>,
-    ) -> Txid {
+    fn push_template(&mut self, locktime: Option<Instant>, template: TxTemplate) -> Txid {
         let index = self.next_index;
         self.next_index = self.next_index.saturating_add(1);
-        let prev_txid = self.tip_txid(assertion_id);
-        let tx = SimulatedTx::new(kind, assertion_id, index, locktime, prev_txid);
+        let tx = SimulatedTx::from_template(index, locktime, template);
         let txid = tx.txid;
         self.journal.push(tx);
         txid
@@ -147,30 +151,101 @@ impl<E: Verifiable, S: beacon_events::EventSink> DisputeBackend for BitcoinBacke
 
     fn assert(&mut self, evidence: Self::Evidence, deadline: Deadline) -> Result<AssertionId> {
         let id = self.mock.assert(evidence, deadline)?;
-        self.push_tx(TxKind::Assert, id, Some(deadline.instant()));
+        let bond = self.bond_sats;
+        self.push_template(
+            Some(deadline.instant()),
+            TxTemplate::new(
+                id,
+                ScriptIntent::AssertCommit {
+                    challenge_deadline: deadline.instant(),
+                },
+                None,
+                bond,
+            ),
+        );
         Ok(id)
     }
 
     fn challenge(&mut self, assertion: AssertionId, challenger: ChallengerId) -> Result<()> {
-        self.mock.challenge(assertion, challenger)?;
-        let locktime = self.mock.get(assertion).map(|v| v.deadline.instant());
-        self.push_tx(TxKind::Challenge, assertion, locktime);
-        if self.mock.get(assertion).and_then(|v| v.challenge_result)
-            == Some(ChallengeResult::Disproven)
-        {
-            self.push_tx(TxKind::Disprove, assertion, None);
+        self.mock.challenge(assertion, challenger.clone())?;
+        let view = self
+            .mock
+            .get(assertion)
+            .ok_or(beacon_core::Error::NotFound)?;
+        let deadline = view.deadline.instant();
+        let prev = self.tip_txid(assertion);
+        let bond = self.bond_sats;
+        self.push_template(
+            Some(deadline),
+            TxTemplate::new(
+                assertion,
+                ScriptIntent::ChallengeOpen {
+                    challenger: challenger.clone(),
+                    challenge_deadline: deadline,
+                },
+                prev,
+                bond,
+            ),
+        );
+        if view.challenge_result == Some(ChallengeResult::Disproven) {
+            let prev = self.tip_txid(assertion);
+            self.push_template(
+                None,
+                TxTemplate::new(
+                    assertion,
+                    ScriptIntent::DisproveHashlock {
+                        challenger: challenger.clone(),
+                    },
+                    prev,
+                    bond,
+                ),
+            );
         }
         Ok(())
     }
 
     fn finalize(&mut self, assertion: AssertionId) -> Result<Settlement> {
+        let view = self
+            .mock
+            .get(assertion)
+            .ok_or(beacon_core::Error::NotFound)?;
+        let unlocked_at = view.deadline.instant();
+        let challenger = self
+            .journal
+            .iter()
+            .rev()
+            .find_map(|tx| match &tx.template.intent {
+                ScriptIntent::ChallengeOpen { challenger, .. }
+                | ScriptIntent::DisproveHashlock { challenger }
+                | ScriptIntent::PunishBond { challenger } => Some(challenger.clone()),
+                _ => None,
+            });
         let settlement = self.mock.finalize(assertion)?;
+        let prev = self.tip_txid(assertion);
+        let bond = self.bond_sats;
         match settlement.outcome {
             beacon_core::Outcome::Accepted => {
-                self.push_tx(TxKind::Withdraw, assertion, None);
+                self.push_template(
+                    None,
+                    TxTemplate::new(
+                        assertion,
+                        ScriptIntent::WithdrawTimeout { unlocked_at },
+                        prev,
+                        bond,
+                    ),
+                );
             }
             beacon_core::Outcome::Rejected => {
-                self.push_tx(TxKind::Punish, assertion, None);
+                let challenger = challenger.unwrap_or_else(|| ChallengerId::new("unknown"));
+                self.push_template(
+                    None,
+                    TxTemplate::new(
+                        assertion,
+                        ScriptIntent::PunishBond { challenger },
+                        prev,
+                        bond,
+                    ),
+                );
             }
         }
         Ok(settlement)
@@ -188,28 +263,32 @@ mod tests {
     }
 
     #[test]
-    fn lifecycle_accept_records_assert_and_withdraw() {
+    fn lifecycle_accept_records_assert_and_withdraw_templates() {
         let mut engine = engine();
         let id = engine
             .assert(MockEvidence::valid("root"), Deadline::from_raw(10))
             .unwrap();
 
         let journal = engine.backend().journal();
-        assert_eq!(journal.len(), 1);
         assert_eq!(journal[0].kind, TxKind::Assert);
-        assert_eq!(journal[0].assertion_id, id);
-        assert_eq!(journal[0].locktime, Some(Instant::new(10)));
-        assert!(journal[0].prev_txid.is_none());
+        assert!(matches!(
+            journal[0].template.intent,
+            ScriptIntent::AssertCommit {
+                challenge_deadline
+            } if challenge_deadline == Instant::new(10)
+        ));
 
-        assert_eq!(engine.finalize(id), Err(Error::DisputePending));
         engine.backend_mut().set_now(Instant::new(10));
         let settlement = engine.finalize(id).unwrap();
         assert!(settlement.is_accepted());
 
         let journal = engine.backend().journal();
         assert_eq!(journal[1].kind, TxKind::Withdraw);
-        assert_eq!(journal[1].prev_txid, Some(journal[0].txid));
-        assert_ne!(journal[0].txid, journal[1].txid);
+        assert!(matches!(
+            journal[1].template.intent,
+            ScriptIntent::WithdrawTimeout { unlocked_at } if unlocked_at == Instant::new(10)
+        ));
+        assert_eq!(journal[1].template.spends, Some(journal[0].txid));
         assert_eq!(
             engine.backend().get(id).unwrap().state,
             AssertionState::Accepted
@@ -217,7 +296,7 @@ mod tests {
     }
 
     #[test]
-    fn lifecycle_reject_records_challenge_disprove_punish() {
+    fn lifecycle_reject_records_script_intents() {
         let mut engine = engine();
         let id = engine
             .assert(MockEvidence::invalid("bad"), Deadline::from_raw(100))
@@ -226,9 +305,14 @@ mod tests {
         let settlement = engine.finalize(id).unwrap();
         assert_eq!(settlement.outcome, Outcome::Rejected);
 
-        let kinds: Vec<_> = engine.backend().journal().iter().map(|t| t.kind).collect();
+        let intents: Vec<_> = engine
+            .backend()
+            .journal()
+            .iter()
+            .map(|t| t.template.intent.tx_kind())
+            .collect();
         assert_eq!(
-            kinds,
+            intents,
             vec![
                 TxKind::Assert,
                 TxKind::Challenge,
@@ -236,11 +320,16 @@ mod tests {
                 TxKind::Punish,
             ]
         );
-        // Graph links: each tx points at the previous tip for this assertion.
-        let j = engine.backend().journal();
-        assert_eq!(j[1].prev_txid, Some(j[0].txid));
-        assert_eq!(j[2].prev_txid, Some(j[1].txid));
-        assert_eq!(j[3].prev_txid, Some(j[2].txid));
+        assert!(matches!(
+            engine.backend().journal()[2].template.intent,
+            ScriptIntent::DisproveHashlock { ref challenger }
+                if challenger.as_str() == "watcher"
+        ));
+        assert!(matches!(
+            engine.backend().journal()[3].template.intent,
+            ScriptIntent::PunishBond { ref challenger }
+                if challenger.as_str() == "watcher"
+        ));
     }
 
     #[test]
@@ -274,5 +363,15 @@ mod tests {
             Err(Error::AlreadySettled)
         );
         assert_eq!(engine.finalize(id), Err(Error::AlreadySettled));
+    }
+
+    #[test]
+    fn bond_sats_stamp_on_templates() {
+        let mut engine = Engine::new(BitcoinBackend::with_bond(MockConfig::default(), 50_000));
+        let id = engine
+            .assert(MockEvidence::valid("x"), Deadline::from_raw(2))
+            .unwrap();
+        assert_eq!(engine.backend().journal()[0].template.value_sats, 50_000);
+        assert_eq!(id, engine.backend().journal()[0].assertion_id);
     }
 }

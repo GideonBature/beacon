@@ -57,10 +57,11 @@ pub(crate) fn print_journal(journal: &[SimulatedTx]) {
     println!("\nsimulated txs:");
     for tx in journal {
         println!(
-            "  #{:<3} {:<10} txid={} locktime={:?} prev={:?}",
+            "  #{:<3} {:<10} txid={} intent={:?} locktime={:?} prev={:?}",
             tx.index,
             format!("{:?}", tx.kind),
             tx.txid,
+            tx.template.intent,
             tx.locktime,
             tx.prev_txid.map(|p| p.to_string())
         );

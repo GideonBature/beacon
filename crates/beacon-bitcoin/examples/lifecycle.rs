@@ -21,12 +21,13 @@ fn main() {
     println!("\nsimulated txs:");
     for tx in engine.backend().journal() {
         println!(
-            "  #{:<3} {:<10} txid={} locktime={:?} prev={:?}",
+            "  #{:<3} {:<10} txid={} locktime={:?} prev={:?} intent={:?}",
             tx.index,
             format!("{:?}", tx.kind),
             tx.txid,
             tx.locktime,
-            tx.prev_txid.map(|p| p.to_string())
+            tx.prev_txid.map(|p| p.to_string()),
+            tx.template.intent
         );
     }
 
