@@ -1,82 +1,147 @@
 # Beacon
 
-**Beacon** is the BitVM3-style dispute layer for Cube.
+**Beacon** is the BitVM3-style **dispute layer** for [Cube](https://github.com/BitVM):  
+Assert → off-chain Evaluate → **Timeout** (honest) or **Disprove** (fraud) on Bitcoin Taproot.
 
-Target cryptographic backend: [BitVM/garbled-snark-verifier](https://github.com/BitVM/garbled-snark-verifier)
-(imported via Cargo `git` dependency — not vendored).
+Cryptographic backend: [BitVM/garbled-snark-verifier](https://github.com/BitVM/garbled-snark-verifier)  
+(Cargo `git` dependency — not vendored).
+
+```text
+Engine posts Assert (adaptor opening + hashlock H(L*))
+        │
+        ▼
+Challenger evaluates garbled verifier off-chain
+        │
+   ┌────┴────┐
+   │ Valid   │ Invalid → reveal L* → Disprove
+   ▼         ▼
+ Timeout   Connector spent (Engine cannot withdraw)
+```
+
+## What works today
+
+| Phase | What | Regtest |
+|-------|------|---------|
+| **A** | Direct-seed opening + Claim Mini + signed Taproot | Yes |
+| **B** | Schnorr adaptor extractable opening | Yes |
+| **C** | Share-bundle reconstruct + tiny garbled Evaluate | Yes |
+| **C+** | Real `garbled_groth16::verify` Garble → Evaluate | Off-chain smoke (`--release`) |
+
+Verified end-to-end: honest → **Accepted**; cheat → **Rejected** with `L*`.  
+Phase C+ on a laptop at `--k 4` is ~15–35 minutes per run (BN254 verifier gadget).
+
+## Cube vs Beacon — who owns what?
+
+**Not everything waits on Cube.** Beacon already owns the Bitcoin dispute graph and the GSV glue. Cube supplies the *statement being proved*.
+
+| Owned by Beacon (can continue now) | Needs Cube (or a Cube-shaped SNARK) |
+|------------------------------------|-------------------------------------|
+| Taproot Assert / Disprove / Timeout | Real CubeVM state-transition circuit / VK |
+| Adaptor opening + hashlock contract | Public inputs that bind to Cube state |
+| GSV link, tiny Evaluate, Groth16 smoke | Production proof artifacts from Cube |
+| Regtest / Docker driver | Mainnet policy, bonds, watchtowers |
+| Assert witness layout, C&C packaging | Wire-compat with Cube’s proving pipeline |
+
+Until Cube exposes a Groth16 (or equivalent) verifier key + proofs, Beacon keeps using **Claim Mini** and GSV’s **DummyCircuit** as stand-ins. Swapping those in is the main integration step — not redesigning Disprove.
 
 ## Quick start
 
 ```bash
+# Fast tests (no GSV)
 cargo test --no-default-features
-cargo run --example phase_a_driver              # simulation
-cargo run --example phase_a_driver -- --cheat
 
-# Live Phase A on regtest (Docker Desktop — see docs/12-regtest-guide.md)
-cp docker-compose.example.yml docker-compose.yml   # gitignored local copy
-docker compose up -d
-export BEACON_RPC_URL=http://127.0.0.1:18443 BEACON_RPC_USER=beacon BEACON_RPC_PASS=beacon
-cargo run --example phase_a_driver --no-default-features -- --regtest
-cargo run --example phase_a_driver --no-default-features -- --regtest --cheat
-
-# Phase B – Schnorr adaptor opening (same Taproot graph)
-cargo run --example phase_a_driver --no-default-features -- --adaptor
-cargo run --example phase_a_driver --no-default-features -- --adaptor --regtest --cheat
-
-# Phase C – VSSS reconstruct + garbled Evaluate (tiny AND MVP)
+# Phase A / B / C simulation
+cargo run --example phase_a_driver --no-default-features
+cargo run --example phase_a_driver --no-default-features -- --cheat
+cargo run --example phase_a_driver --no-default-features -- --adaptor --cheat
 cargo run --example phase_a_driver --no-default-features -- --phase-c --cheat
-cargo run --example phase_a_driver --no-default-features -- --phase-c --regtest --cheat
-# Real GSV Evaluate (use stock ./target — see docs/16-phase-c-status.md)
-CARGO_TARGET_DIR=./target cargo run --example phase_c_garble --features gsv --no-default-features
-
-# Phase C+ – full garbled Groth16 verify (heavy; --release)
-CARGO_TARGET_DIR=./target cargo run --release --example phase_c_plus --features gsv --no-default-features -- --k 4
-CARGO_TARGET_DIR=./target cargo run --release --example phase_c_plus --features gsv --no-default-features -- --cheat
-
-# Optional: GSV-linked backend (git dep; heavier build)
-cargo run --example gsv_link
-cargo run --example phase_a_driver -- --gsv --cheat
 ```
 
-## Circuit backends
+### Regtest (Docker)
+
+```bash
+cp docker-compose.example.yml docker-compose.yml   # gitignored
+docker compose up -d
+export BEACON_RPC_URL=http://127.0.0.1:18443 BEACON_RPC_USER=beacon BEACON_RPC_PASS=beacon
+
+cargo run --example phase_a_driver --no-default-features -- --regtest
+cargo run --example phase_a_driver --no-default-features -- --adaptor --regtest --cheat
+cargo run --example phase_a_driver --no-default-features -- --phase-c --regtest --cheat
+```
+
+See [`docs/12-regtest-guide.md`](docs/12-regtest-guide.md).
+
+### GSV / Phase C+ (heavier)
+
+Use a directory literally named `target` (SP1 build-script quirk):
+
+```bash
+export CARGO_TARGET_DIR=./target
+
+# Tiny garbled Evaluate
+cargo run --example phase_c_garble --features gsv --no-default-features
+
+# Full garbled Groth16 (prefer --release; expect many minutes)
+cargo run --release --example phase_c_plus --features gsv --no-default-features -- --k 4
+cargo run --release --example phase_c_plus --features gsv --no-default-features -- --k 4 --cheat
+```
+
+## Architecture
 
 ```text
 CircuitBackend
-├── ClaimMiniBackend          ← Phase A (works today)
-└── GarbledSnarkBackend       ← git-depends on garbled-snark-verifier
+├── ClaimMiniBackend       ← Phase A–C stand-in (fast)
+└── GarbledSnarkBackend    ← GSV-linked path
+
+Opening
+├── DirectSeedOpening      ← Phase A
+└── AdaptorOpening         ← Phase B / C / C+
+
+phase_c/
+├── reconstruct + evaluate ← tiny AND (Phase C)
+└── groth16 + plus         ← garbled Groth16 (Phase C+)
 ```
 
-Assert / Disprove / Timeout stay the same across backends.  
-`H(L_invalid) = SHA256(L*)` for the Taproot hashlock.
+On-chain rule (unchanged across phases):
 
-```toml
-# Cargo.toml
-garbled-snark-verifier = { git = "https://github.com/BitVM/garbled-snark-verifier", default-features = false, features = ["test-utils"], optional = true }
+```text
+H(L_invalid) = SHA256(L*)     # Disprove leaf: OP_SHA256 <H> OP_EQUALVERIFY
 ```
 
-Upstream is **GPL-3.0-only**. Default `gsv` builds that into Beacon binaries.
+## Features
 
-See [`docs/14-circuit-backend.md`](docs/14-circuit-backend.md).
+| Feature | Purpose |
+|---------|---------|
+| *(default `gsv`)* | Link garbled-snark-verifier (GPL-3.0-only) |
+| `--no-default-features` | Fast Claim Mini / regtest without GSV |
+| `gsv-vsss` | Upstream VSSS lagrange reconstruct |
+| `gsv-groth16` | Alias for Phase C+ (`gsv`) |
 
-## Status
+## Roadmap
 
-- [x] Phase A logical flow (Assert → Evaluate → Disprove / Timeout)
-- [x] Claim Mini circuit + `L*` fraud secret
-- [x] Pluggable `CircuitBackend` + `--gsv` driver switch
-- [x] Hashlock-correct `SHA256(L*)` commitment
-- [x] Taproot Assert / Disprove / Timeout with real Schnorr signatures
-- [x] Live regtest runner (`--regtest` / `--regtest --cheat`)
-- [x] Real `garbled-snark-verifier` linked via git dependency
-- [x] Phase B – Schnorr adaptor extractable opening (`--adaptor`)
-- [x] Phase C – VSSS reconstruct + tiny garbled Evaluate (`--phase-c`)
-- [x] Phase C+ – garbled Groth16 Evaluate (`phase_c_plus`, `--release`)
+- [x] Phase A – Assert → Evaluate → Disprove / Timeout (regtest)
+- [x] Phase B – Adaptor extractable opening
+- [x] Phase C – Tiny garbled Evaluate + share bundle
+- [x] Phase C+ – Garbled Groth16 Evaluate smoke
+- [ ] Assert witness packing for Groth16 / adaptor on-chain
+- [ ] Production cut-and-choose + ciphertext persistence
+- [ ] Wire GSV `AdaptorInfo` (Fr shares) to Beacon opening
+- [ ] Swap DummyCircuit / Claim Mini for **Cube** VK + proofs
 
 ## Docs
 
-See [`docs/`](docs/) — especially [`07-garbled-snark-verifier.md`](docs/07-garbled-snark-verifier.md)
-and [`docs/14-circuit-backend.md`](docs/14-circuit-backend.md).
+| Doc | Topic |
+|-----|--------|
+| [`docs/01-design-overview.md`](docs/01-design-overview.md) | Design |
+| [`docs/11-phase-a-status.md`](docs/11-phase-a-status.md) | Phase A |
+| [`docs/15-phase-b-status.md`](docs/15-phase-b-status.md) | Phase B |
+| [`docs/16-phase-c-status.md`](docs/16-phase-c-status.md) | Phase C |
+| [`docs/17-phase-c-plus-status.md`](docs/17-phase-c-plus-status.md) | Phase C+ |
+| [`docs/12-regtest-guide.md`](docs/12-regtest-guide.md) | Docker / bitcoind |
+| [`docs/14-circuit-backend.md`](docs/14-circuit-backend.md) | Backends + GSV |
 
 ## License
 
 MIT — see [`LICENSE`](LICENSE).  
-Note: the optional GSV dependency is GPL-3.0-only.
+
+Binaries built with `--features gsv` (the default) link **GPL-3.0-only** garbled-snark-verifier; distribute accordingly. Use `--no-default-features` for MIT-only Claim Mini builds.
