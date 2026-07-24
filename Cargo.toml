@@ -4,10 +4,21 @@ version = "0.1.0"
 edition = "2021"
 description = "Beacon – BitVM3-style dispute layer for Cube"
 license = "MIT"
+rust-version = "1.90"
 
 [[example]]
 name = "phase_a_driver"
 path = "examples/phase_a_driver.rs"
+
+[[example]]
+name = "gsv_link"
+path = "examples/gsv_link.rs"
+required-features = ["gsv"]
+
+[features]
+default = ["gsv"]
+# Link BitVM/garbled-snark-verifier from GitHub. That crate is GPL-3.0-only.
+gsv = ["dep:garbled-snark-verifier"]
 
 [dependencies]
 sha2 = "0.10"
@@ -17,3 +28,6 @@ serde_json = "1.0"
 bitcoin = { version = "0.32", features = ["rand-std"] }
 secp256k1 = { version = "0.29", features = ["rand-std", "global-context"] }
 rand = "0.8"
+# Track upstream; no vendored copy. `default-features = false` avoids enabling
+# soldering/VSSS by default (SP1 build-deps still resolve from their Cargo.toml).
+garbled-snark-verifier = { git = "https://github.com/BitVM/garbled-snark-verifier", default-features = false, features = ["test-utils"], optional = true }

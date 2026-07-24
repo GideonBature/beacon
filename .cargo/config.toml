@@ -1,0 +1,4 @@
+# Keep the target directory named `target` so SP1 build scripts (pulled only
+# when enabling GSV's `sp1-soldering`) that inspect OUT_DIR parents succeed.
+[build]
+target-dir = "target"
