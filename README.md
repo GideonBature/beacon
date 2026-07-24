@@ -126,8 +126,9 @@ H(L_invalid) = SHA256(L*)     # Disprove leaf: OP_SHA256 <H> OP_EQUALVERIFY
 - [x] Phase C+ – Garbled Groth16 Evaluate smoke
 - [x] Assert witness packing v1 (OP_RETURN + chain round-trip)
 - [x] Ciphertext store MVP (disk CT + hash verify + Evaluate-from-store)
+- [x] Cut-and-choose schedule MVP + Assert `ciphertext_hash`
 - [ ] Mainnet policy for large datacarrier / alternate reveal-tx carrier
-- [ ] Multi-instance cut-and-choose schedule + C+ proof sidecar
+- [ ] C+ proof/VK sidecar + check-set re-garble consistency
 - [ ] Wire GSV `AdaptorInfo` (Fr shares) to Beacon opening
 - [ ] Swap DummyCircuit / Claim Mini for **Cube** VK + proofs
 
@@ -141,7 +142,8 @@ H(L_invalid) = SHA256(L*)     # Disprove leaf: OP_SHA256 <H> OP_EQUALVERIFY
 | [`docs/16-phase-c-status.md`](docs/16-phase-c-status.md) | Phase C |
 | [`docs/17-phase-c-plus-status.md`](docs/17-phase-c-plus-status.md) | Phase C+ |
 | [`docs/18-assert-witness.md`](docs/18-assert-witness.md) | Assert witness packing + Cube alignment |
-| [`docs/19-ciphertext-store.md`](docs/19-ciphertext-store.md) | Off-chain CT persist / C&C |
+| [`docs/19-ciphertext-store.md`](docs/19-ciphertext-store.md) | Off-chain CT persist |
+| [`docs/20-cut-and-choose-schedule.md`](docs/20-cut-and-choose-schedule.md) | C&C schedule + Assert CT hash |
 | [`docs/12-regtest-guide.md`](docs/12-regtest-guide.md) | Docker / bitcoind |
 | [`docs/14-circuit-backend.md`](docs/14-circuit-backend.md) | Backends + GSV |
 

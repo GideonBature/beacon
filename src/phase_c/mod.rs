@@ -9,6 +9,7 @@ pub mod evaluate;
 pub mod flow;
 pub mod labels;
 pub mod reconstruct;
+pub mod schedule;
 
 #[cfg(feature = "gsv")]
 pub mod groth16;
@@ -22,6 +23,11 @@ pub use evaluate::{commit_l_invalid, evaluate_claim};
 pub use flow::PhaseCFlow;
 pub use labels::{expand_label_bytes, seed_from_label_material};
 pub use reconstruct::{reconstruct_label_seed, ShareBundle};
+pub use schedule::{
+    check_openings_from_store, commits_from_store, fixed_schedule, open_check_instances,
+    require_eval_committed, sample_schedule, validate_schedule, CheckOpening, CutAndChooseParams,
+    CutAndChooseSchedule, InstanceCommit, ScheduleError,
+};
 
 #[cfg(feature = "gsv")]
 pub use groth16::{

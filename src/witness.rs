@@ -45,6 +45,8 @@ pub struct AssertWitnessV1 {
     pub claim_bytes: Vec<u8>,
     pub opening: AssertOpening,
     pub share_bundle: Option<ShareBundle>,
+    /// Off-chain garbled CT commitment for `statement.instance_id` (eval instance `a`).
+    pub ciphertext_hash: Option<[u8; 32]>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -56,6 +58,7 @@ pub enum WitnessError {
     OpeningMismatch,
     ClaimHashMismatch,
     HashlockMismatch,
+    CiphertextHashMismatch,
 }
 
 impl std::fmt::Display for WitnessError {
@@ -69,6 +72,9 @@ impl std::fmt::Display for WitnessError {
             Self::ClaimHashMismatch => write!(f, "assert witness: claim_bytes hash mismatch"),
             Self::HashlockMismatch => {
                 write!(f, "assert witness: h_l_invalid does not match connector")
+            }
+            Self::CiphertextHashMismatch => {
+                write!(f, "assert witness: ciphertext_hash does not match store")
             }
         }
     }
@@ -99,7 +105,14 @@ impl AssertWitnessV1 {
             claim_bytes,
             opening,
             share_bundle,
+            ciphertext_hash: None,
         }
+    }
+
+    /// Bind the off-chain CT commitment for the evaluation instance.
+    pub fn with_ciphertext_hash(mut self, hash: [u8; 32]) -> Self {
+        self.ciphertext_hash = Some(hash);
+        self
     }
 
     /// Encode to bytes (`MAGIC || FORMAT || …`).
@@ -139,6 +152,13 @@ impl AssertWitnessV1 {
             Some(b) => {
                 out.push(1);
                 encode_share_bundle(&mut out, b);
+            }
+        }
+        match &self.ciphertext_hash {
+            None => out.push(0),
+            Some(h) => {
+                out.push(1);
+                out.extend_from_slice(h);
             }
         }
         out
@@ -198,6 +218,16 @@ impl AssertWitnessV1 {
             1 => Some(decode_share_bundle(&mut c)?),
             _ => return Err(WitnessError::BadFormat),
         };
+        // Optional trailing field (absent in early FORMAT_V1 blobs).
+        let ciphertext_hash = if c.is_empty() {
+            None
+        } else {
+            match c.read_u8()? {
+                0 => None,
+                1 => Some(c.read_array32()?),
+                _ => return Err(WitnessError::BadFormat),
+            }
+        };
         if !c.is_empty() {
             return Err(WitnessError::BadFormat);
         }
@@ -213,6 +243,7 @@ impl AssertWitnessV1 {
             claim_bytes,
             opening,
             share_bundle,
+            ciphertext_hash,
         };
         wit.validate_opening()?;
         Ok(wit)
@@ -234,6 +265,15 @@ impl AssertWitnessV1 {
             return Err(WitnessError::HashlockMismatch);
         }
         Ok(())
+    }
+
+    /// Ensure packed `ciphertext_hash` matches the store commitment for instance `a`.
+    pub fn check_ciphertext_hash(&self, store_hash: &[u8; 32]) -> Result<(), WitnessError> {
+        match &self.ciphertext_hash {
+            None => Ok(()),
+            Some(h) if h == store_hash => Ok(()),
+            Some(_) => Err(WitnessError::CiphertextHashMismatch),
+        }
     }
 }
 
@@ -471,6 +511,32 @@ mod tests {
             AssertWitnessV1::decode(&w.encode()),
             Err(WitnessError::ClaimHashMismatch)
         ));
+    }
+
+    #[test]
+    fn ciphertext_hash_roundtrip_and_check() {
+        let claim_bytes = sample_claim_bytes();
+        let opening = AssertOpening::Direct(DirectSeedOpening::from_claim_bytes(0, &claim_bytes));
+        let ct = [0xAB; 32];
+        let w = AssertWitnessV1::new(claim_bytes, opening, [0; 32], None).with_ciphertext_hash(ct);
+        let dec = AssertWitnessV1::decode(&w.encode()).unwrap();
+        assert_eq!(dec.ciphertext_hash, Some(ct));
+        dec.check_ciphertext_hash(&ct).unwrap();
+        assert!(matches!(
+            dec.check_ciphertext_hash(&[0; 32]),
+            Err(WitnessError::CiphertextHashMismatch)
+        ));
+    }
+
+    #[test]
+    fn legacy_blob_without_ct_flag_decodes() {
+        // Encode without trailing ct flag by truncating the final 0 byte.
+        let claim_bytes = sample_claim_bytes();
+        let opening = AssertOpening::Direct(DirectSeedOpening::from_claim_bytes(0, &claim_bytes));
+        let mut enc = AssertWitnessV1::new(claim_bytes, opening, [0; 32], None).encode();
+        assert_eq!(enc.pop(), Some(0)); // drop ct_flag=0
+        let dec = AssertWitnessV1::decode(&enc).unwrap();
+        assert!(dec.ciphertext_hash.is_none());
     }
 
     fn bare_tx() -> bitcoin::Transaction {

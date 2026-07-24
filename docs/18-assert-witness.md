@@ -40,7 +40,12 @@ MAGIC "BEAC" | FORMAT_V1=1
 | claim_bytes (u32 LE length + bytes)
 | opening_tag (1=direct | 2=adaptor) + opening fields
 | share_flag (0|1) + optional ShareBundle
+| ct_hash_flag (0|1) + optional ciphertext_hash[32]   // eval instance a
 ```
+
+`ciphertext_hash` binds the off-chain garbled stream for `instance_id`
+([`CiphertextStore`](19-ciphertext-store.md)). Older blobs without the trailing
+flag still decode (`ciphertext_hash = None`).
 
 Module: [`src/witness.rs`](../src/witness.rs).
 

@@ -30,6 +30,11 @@ name = "phase_c_persist"
 path = "examples/phase_c_persist.rs"
 required-features = ["gsv"]
 
+[[example]]
+name = "phase_c_cnc"
+path = "examples/phase_c_cnc.rs"
+required-features = ["gsv"]
+
 [features]
 default = ["gsv"]
 # Link BitVM/garbled-snark-verifier from GitHub. That crate is GPL-3.0-only.

@@ -48,9 +48,13 @@ cargo test --features gsv --no-default-features persist_
 cargo run --example phase_c_persist --features gsv --no-default-features
 ```
 
+## Related
+
+- Schedule MVP: [`20-cut-and-choose-schedule.md`](20-cut-and-choose-schedule.md)
+- Assert optional `ciphertext_hash`: [`18-assert-witness.md`](18-assert-witness.md)
+
 ## Still open
 
-- Multi-instance check-set schedule (open check GCs, keep eval GC)
 - Serialize C+ proof/VK/input wires as sidecar (today still in `Groth16AssertBundle` RAM)
-- Optional `ciphertext_hash` field on `AssertWitnessV1` statement
+- Re-garble consistency checks for check-set openings
 - Wire GSV `AdaptorInfo` / full VSSS C&C protocol

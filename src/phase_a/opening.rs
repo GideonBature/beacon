@@ -32,6 +32,7 @@ impl DirectSeedOpening {
     pub fn from_claim_bytes(instance_id: u32, claim_bytes: &[u8]) -> Self {
         let mut hasher = Sha256::new();
         hasher.update(b"CubePhaseASeed");
+        hasher.update(instance_id.to_le_bytes());
         hasher.update(claim_bytes);
         let seed: [u8; 32] = hasher.finalize().into();
 
@@ -53,6 +54,7 @@ impl DirectSeedOpening {
     pub fn derive_label_material(&self) -> [u8; 32] {
         let mut hasher = Sha256::new();
         hasher.update(b"CubePhaseALabels");
+        hasher.update(self.instance_id.to_le_bytes());
         hasher.update(&self.seed);
         hasher.finalize().into()
     }
@@ -69,5 +71,15 @@ mod tests {
         let o2 = DirectSeedOpening::from_claim_bytes(0, claim);
         assert_eq!(o1.seed, o2.seed);
         assert_eq!(o1.public_inputs_hash, o2.public_inputs_hash);
+    }
+
+    #[test]
+    fn instance_id_binds_seed() {
+        let claim = b"dummy claim data";
+        let a = DirectSeedOpening::from_claim_bytes(0, claim);
+        let b = DirectSeedOpening::from_claim_bytes(1, claim);
+        assert_ne!(a.seed, b.seed);
+        assert_ne!(a.derive_label_material(), b.derive_label_material());
+        assert_eq!(a.public_inputs_hash, b.public_inputs_hash);
     }
 }

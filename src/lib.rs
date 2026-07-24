@@ -37,6 +37,11 @@ pub use phase_b::opening::AdaptorOpening;
 pub use phase_c::ciphertext_store::{CiphertextMeta, CiphertextStore, StoreError};
 pub use phase_c::flow::PhaseCFlow;
 pub use phase_c::reconstruct::ShareBundle;
+pub use phase_c::schedule::{
+    check_openings_from_store, commits_from_store, fixed_schedule, open_check_instances,
+    require_eval_committed, sample_schedule, CheckOpening, CutAndChooseParams,
+    CutAndChooseSchedule, InstanceCommit, ScheduleError,
+};
 
 pub use witness::{
     attach_op_return_output, attach_to_funding_witness, extract_from_funding_witness,
