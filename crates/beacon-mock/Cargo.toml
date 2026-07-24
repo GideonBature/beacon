@@ -12,3 +12,4 @@ workspace = true
 
 [dependencies]
 beacon-core = { path = "../beacon-core" }
+beacon-events = { path = "../beacon-events" }

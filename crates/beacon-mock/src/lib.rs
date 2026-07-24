@@ -1,8 +1,8 @@
 //! In-memory [`MockBackend`] — reference [`DisputeBackend`](beacon_core::DisputeBackend).
 //!
 //! Drives assertions through the RFC-0004 lifecycle without Bitcoin, networking,
-//! or named proof systems. Intended as the executable specification for tests
-//! that every future backend (including Bitcoin) must also satisfy.
+//! or named proof systems. Emits RFC-0003 lifecycle events into an
+//! [`EventSink`](beacon_events::EventSink).
 
 #![forbid(unsafe_code)]
 
@@ -12,23 +12,14 @@ use beacon_core::{
     AssertionId, AssertionState, BackendId, ChallengeId, ChallengerId, Deadline, DisputeBackend,
     Error, Instant, Outcome, Result, Settlement, Verifiable,
 };
+use beacon_events::{Event, EventSink, RecordingSink};
 
-/// Result of resolving a challenge (RFC-0003 / RFC-0004 naming).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum ChallengeResult {
-    /// Evidence failed `check` — challenger wins on finalize.
-    Disproven,
-    /// Evidence passed `check` — assertion wins on finalize.
-    Upheld,
-}
+pub use beacon_events::ChallengeResult;
 
 #[derive(Clone, Debug)]
 struct OpenChallenge {
-    #[allow(dead_code)] // retained for events / inspection in later commits
-    id: ChallengeId,
-    #[allow(dead_code)]
-    challenger: ChallengerId,
     result: ChallengeResult,
+    /// Reserved for async dispute timeout (RFC-0004 T6).
     #[allow(dead_code)]
     dispute_deadline: Deadline,
 }
@@ -95,36 +86,47 @@ impl Default for MockConfig {
 }
 
 /// In-memory dispute backend (Milestone 1).
-pub struct MockBackend<E> {
+pub struct MockBackend<E, S = RecordingSink> {
     config: MockConfig,
     now: Instant,
     records: HashMap<AssertionId, Record<E>>,
+    sink: S,
 }
 
-impl<E: std::fmt::Debug> std::fmt::Debug for MockBackend<E> {
+impl<E: std::fmt::Debug, S: std::fmt::Debug> std::fmt::Debug for MockBackend<E, S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("MockBackend")
             .field("config", &self.config)
             .field("now", &self.now)
             .field("records", &self.records)
+            .field("sink", &self.sink)
             .finish()
     }
 }
 
-impl<E> Default for MockBackend<E> {
+impl<E> Default for MockBackend<E, RecordingSink> {
     fn default() -> Self {
         Self::new(MockConfig::default())
     }
 }
 
-impl<E> MockBackend<E> {
-    /// Create a mock backend with the given config. Clock starts at `0`.
+impl<E> MockBackend<E, RecordingSink> {
+    /// Create a mock backend with a [`RecordingSink`]. Clock starts at `0`.
     #[must_use]
     pub fn new(config: MockConfig) -> Self {
+        Self::with_sink(config, RecordingSink::new())
+    }
+}
+
+impl<E, S> MockBackend<E, S> {
+    /// Create a mock backend that emits into `sink`.
+    #[must_use]
+    pub fn with_sink(config: MockConfig, sink: S) -> Self {
         Self {
             config,
             now: Instant::new(0),
             records: HashMap::new(),
+            sink,
         }
     }
 
@@ -144,6 +146,17 @@ impl<E> MockBackend<E> {
         self.now.0 = self.now.0.saturating_add(delta);
     }
 
+    /// Borrow the event sink.
+    #[must_use]
+    pub const fn sink(&self) -> &S {
+        &self.sink
+    }
+
+    /// Borrow the event sink mutably.
+    pub const fn sink_mut(&mut self) -> &mut S {
+        &mut self.sink
+    }
+
     /// Backend id string used for assertions created here.
     #[must_use]
     pub fn backend_id() -> BackendId {
@@ -151,7 +164,21 @@ impl<E> MockBackend<E> {
     }
 }
 
-impl<E: Verifiable> MockBackend<E> {
+impl<E> MockBackend<E, RecordingSink> {
+    /// Borrow recorded events.
+    #[must_use]
+    pub fn events(&self) -> &[Event] {
+        self.sink.events()
+    }
+
+    /// Drain recorded events.
+    #[must_use]
+    pub fn take_events(&mut self) -> Vec<Event> {
+        self.sink.take()
+    }
+}
+
+impl<E: Verifiable, S> MockBackend<E, S> {
     /// Inspect a stored assertion.
     #[must_use]
     pub fn get(&self, id: AssertionId) -> Option<AssertionView> {
@@ -166,7 +193,7 @@ impl<E: Verifiable> MockBackend<E> {
     }
 }
 
-impl<E: Verifiable> DisputeBackend for MockBackend<E> {
+impl<E: Verifiable, S: EventSink> DisputeBackend for MockBackend<E, S> {
     type Evidence = E;
 
     fn assert(&mut self, evidence: Self::Evidence, deadline: Deadline) -> Result<AssertionId> {
@@ -182,6 +209,10 @@ impl<E: Verifiable> DisputeBackend for MockBackend<E> {
                 challenge: None,
             },
         );
+        self.sink.emit(Event::AssertionCreated {
+            assertion_id: id,
+            challenge_deadline: deadline,
+        });
         Ok(id)
     }
 
@@ -209,14 +240,24 @@ impl<E: Verifiable> DisputeBackend for MockBackend<E> {
             ChallengeResult::Disproven
         };
 
+        let challenge_id = ChallengeId::new();
         let dispute_deadline = Deadline::from_raw(now.get().saturating_add(dispute_window));
         record.state = AssertionState::Disputing;
         record.dispute_deadline = Some(dispute_deadline);
         record.challenge = Some(OpenChallenge {
-            id: ChallengeId::new(),
-            challenger,
             result,
             dispute_deadline,
+        });
+
+        self.sink.emit(Event::ChallengeOpened {
+            assertion_id: assertion,
+            challenge_id,
+            challenger,
+        });
+        self.sink.emit(Event::ChallengeResolved {
+            assertion_id: assertion,
+            challenge_id,
+            result,
         });
         Ok(())
     }
@@ -256,6 +297,11 @@ impl<E: Verifiable> DisputeBackend for MockBackend<E> {
             Outcome::Rejected => AssertionState::Rejected,
         };
         record.settled = true;
+
+        self.sink.emit(Event::AssertionFinalized {
+            assertion_id: assertion,
+            outcome,
+        });
 
         Ok(Settlement::new(assertion, outcome))
     }
@@ -320,7 +366,6 @@ mod tests {
         assert_eq!(view.state, AssertionState::Asserted);
         assert!(!view.settled);
 
-        // Too early to finalize.
         assert_eq!(engine.finalize(id), Err(Error::DisputePending));
 
         engine.backend_mut().set_now(Instant::new(10));
@@ -332,6 +377,23 @@ mod tests {
         assert_eq!(view.state, AssertionState::Accepted);
         assert!(view.settled);
         assert!(view.is_settled());
+
+        let events = engine.backend().events();
+        assert!(matches!(
+            events[0],
+            Event::AssertionCreated {
+                assertion_id,
+                ..
+            } if assertion_id == id
+        ));
+        assert!(matches!(
+            events[1],
+            Event::AssertionFinalized {
+                assertion_id,
+                outcome: Outcome::Accepted,
+            } if assertion_id == id
+        ));
+        assert_eq!(events.len(), 2);
     }
 
     #[test]
@@ -355,6 +417,25 @@ mod tests {
         let view = engine.backend().get(id).unwrap();
         assert_eq!(view.state, AssertionState::Rejected);
         assert!(view.settled);
+
+        let events = engine.backend().events();
+        assert_eq!(events.len(), 4);
+        assert!(matches!(events[0], Event::AssertionCreated { .. }));
+        assert!(matches!(events[1], Event::ChallengeOpened { .. }));
+        assert!(matches!(
+            events[2],
+            Event::ChallengeResolved {
+                result: ChallengeResult::Disproven,
+                ..
+            }
+        ));
+        assert!(matches!(
+            events[3],
+            Event::AssertionFinalized {
+                outcome: Outcome::Rejected,
+                ..
+            }
+        ));
     }
 
     #[test]
@@ -367,13 +448,10 @@ mod tests {
         engine.backend_mut().set_now(Instant::new(5));
         let _ = engine.finalize(id).unwrap();
 
-        // Challenge after settle must fail.
         assert_eq!(
             engine.challenge(id, ChallengerId::new("late")),
             Err(Error::AlreadySettled)
         );
-
-        // Finalize again must fail (no double settlement).
         assert_eq!(engine.finalize(id), Err(Error::AlreadySettled));
     }
 

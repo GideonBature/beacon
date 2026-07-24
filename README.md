@@ -45,22 +45,16 @@ beacon/
 ├── rfcs/
 ├── docs/
 ├── crates/
-│   ├── beacon-core      # protocol types/traits
-│   ├── beacon-events    # lifecycle events
-│   ├── beacon-mock      # in-memory backend
+│   ├── beacon-core      # protocol types/traits + Engine
+│   ├── beacon-events    # RFC-0003 lifecycle events
+│   ├── beacon-mock      # in-memory backend + examples
 │   └── beacon-cli       # developer CLI
 └── examples/
 ```
 
-No Cube in this repository. Cube will import Beacon.
-
-## Development
-
 ```bash
 cargo test --workspace
-cargo clippy --workspace --all-targets -- -D warnings
-cargo fmt --all -- --check
-cargo run -p beacon-cli
+cargo run -p beacon-mock --example lifecycle
 ```
 
 **Every commit must leave the project compilable, documented, and testable.**
