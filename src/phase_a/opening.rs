@@ -9,7 +9,7 @@ use sha2::{Digest, Sha256};
 use serde::{Deserialize, Serialize};
 
 /// The data that appears in the Assert witness for Phase A.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DirectSeedOpening {
     /// Protocol version so we can later switch to adaptor openings.
     pub version: u8,

@@ -4,12 +4,21 @@ Preferred: **Docker Desktop** + Compose. Native `bitcoind` also works.
 
 ## Option A — Docker (recommended)
 
-`docker-compose.yml` is **gitignored** (local only). Use the tracked example:
+`docker-compose.yml` is **gitignored** (local only). Use the tracked example
+(includes `-datacarriersize=100000` for AssertWitness OP_RETURN):
 
 ```bash
 cp docker-compose.example.yml docker-compose.yml
 docker compose up -d
 docker compose ps   # wait until healthy
+```
+
+If you already had a Compose file from before Assert witness packing, copy the
+example again (or add `-datacarriersize=100000`) and recreate:
+
+```bash
+cp docker-compose.example.yml docker-compose.yml
+docker compose up -d --force-recreate
 ```
 
 RPC defaults match the Compose file:

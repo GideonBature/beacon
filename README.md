@@ -123,7 +123,8 @@ H(L_invalid) = SHA256(L*)     # Disprove leaf: OP_SHA256 <H> OP_EQUALVERIFY
 - [x] Phase B – Adaptor extractable opening
 - [x] Phase C – Tiny garbled Evaluate + share bundle
 - [x] Phase C+ – Garbled Groth16 Evaluate smoke
-- [ ] Assert witness packing for Groth16 / adaptor on-chain
+- [x] Assert witness packing v1 (OP_RETURN + chain round-trip)
+- [ ] Mainnet policy for large datacarrier / alternate reveal-tx carrier
 - [ ] Production cut-and-choose + ciphertext persistence
 - [ ] Wire GSV `AdaptorInfo` (Fr shares) to Beacon opening
 - [ ] Swap DummyCircuit / Claim Mini for **Cube** VK + proofs
@@ -137,6 +138,7 @@ H(L_invalid) = SHA256(L*)     # Disprove leaf: OP_SHA256 <H> OP_EQUALVERIFY
 | [`docs/15-phase-b-status.md`](docs/15-phase-b-status.md) | Phase B |
 | [`docs/16-phase-c-status.md`](docs/16-phase-c-status.md) | Phase C |
 | [`docs/17-phase-c-plus-status.md`](docs/17-phase-c-plus-status.md) | Phase C+ |
+| [`docs/18-assert-witness.md`](docs/18-assert-witness.md) | Assert witness packing + Cube alignment |
 | [`docs/12-regtest-guide.md`](docs/12-regtest-guide.md) | Docker / bitcoind |
 | [`docs/14-circuit-backend.md`](docs/14-circuit-backend.md) | Backends + GSV |
 

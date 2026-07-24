@@ -50,7 +50,7 @@ impl LabelOpening for AdaptorOpening {
 }
 
 /// Opening carried alongside an Assert (witness interpretation).
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum AssertOpening {
     Direct(DirectSeedOpening),
     Adaptor(AdaptorOpening),

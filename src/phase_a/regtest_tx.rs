@@ -390,10 +390,26 @@ mod tests {
             value: Amount::from_sat(100_000),
             script_pubkey: p2tr_address(&funding, Network::Regtest).script_pubkey(),
         };
+        // Packed assert witness rides as OP_RETURN (before signing).
+        let blob = crate::witness::AssertWitnessV1::new(
+            b"claim".to_vec(),
+            assert_res.opening.clone(),
+            [0x11; 32],
+            None,
+        )
+        .encode();
+        crate::witness::attach_op_return_output(&mut assert_res.tx, &blob).unwrap();
         sign_assert_keypath(&mut assert_res.tx, &funding_prev, &funding).unwrap();
         assert_eq!(assert_res.tx.input[0].witness.len(), 1);
         assert_eq!(assert_res.tx.input[0].witness.nth(0).unwrap().len(), 64);
         assert_ne!(assert_res.tx.input[0].witness.nth(0).unwrap(), &[0u8; 64]);
+        let recovered = crate::witness::AssertWitnessV1::decode(
+            crate::witness::extract_from_op_return(&assert_res.tx)
+                .unwrap()
+                .as_slice(),
+        )
+        .unwrap();
+        assert_eq!(recovered.statement.h_l_invalid, [0x11; 32]);
 
         let connector = &assert_res.tx.output[0];
         let timeout = build_timeout_tx(

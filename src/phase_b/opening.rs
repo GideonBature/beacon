@@ -10,7 +10,7 @@ use crate::phase_b::adaptor::{
 };
 
 /// Assert-witness opening that reveals label material via adaptor extraction.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AdaptorOpening {
     /// Protocol version (`VERSION_PHASE_B`).
     pub version: u8,

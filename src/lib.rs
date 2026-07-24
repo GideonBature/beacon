@@ -15,13 +15,14 @@ pub mod phase_b;
 pub mod phase_c;
 pub mod opening;
 pub mod tx_templates;
+pub mod witness;
 
 pub use backend::{
     hashlock_commit, CircuitBackend, ClaimMiniBackend, EvaluationResult, GarbledSnarkBackend,
 };
 pub use claim_mini::{ClaimMini, OutputWire};
 pub use opening::{AssertOpening, LabelOpening};
-pub use phase_a::flow::{serialize_claim, PhaseAFlow};
+pub use phase_a::flow::{deserialize_claim, serialize_claim, PhaseAFlow};
 pub use phase_a::opening::DirectSeedOpening;
 pub use phase_a::regtest_run::{
     connect_regtest, run_phase_a_regtest, run_phase_b_regtest, run_phase_c_regtest, RegtestOutcome,
@@ -35,6 +36,10 @@ pub use phase_b::flow::PhaseBFlow;
 pub use phase_b::opening::AdaptorOpening;
 pub use phase_c::flow::PhaseCFlow;
 pub use phase_c::reconstruct::ShareBundle;
+pub use witness::{
+    attach_op_return_output, attach_to_funding_witness, extract_from_funding_witness,
+    extract_from_op_return, AssertWitnessV1, PublicStatement, FORMAT_V1, MAGIC,
+};
 
 #[cfg(feature = "gsv")]
 pub use phase_c::{

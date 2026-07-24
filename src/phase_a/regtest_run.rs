@@ -17,7 +17,7 @@ use rand::thread_rng;
 use crate::backend::{CircuitBackend, ClaimMiniBackend, EvaluationResult};
 use crate::claim_mini::ClaimMini;
 use crate::opening::AssertOpening;
-use crate::phase_a::flow::{serialize_claim, PhaseAFlow};
+use crate::phase_a::flow::{deserialize_claim, serialize_claim, PhaseAFlow};
 use crate::phase_a::regtest_tx::{
     build_assert_tx_with_assert_opening, build_assert_tx_with_opening, build_disprove_tx,
     build_timeout_tx, p2tr_address, sign_assert_keypath, OpeningMode, REGTEST_DISPUTE_WINDOW,
@@ -27,6 +27,9 @@ use crate::phase_b::opening::AdaptorOpening;
 use crate::phase_c::evaluate::commit_l_invalid;
 use crate::phase_c::flow::PhaseCFlow;
 use crate::phase_c::reconstruct::{reconstruct_label_seed, ShareBundle};
+use crate::witness::{
+    attach_op_return_output, extract_from_op_return, AssertWitnessV1,
+};
 
 /// Outcome of a regtest Phase A run.
 #[derive(Debug)]
@@ -255,22 +258,60 @@ fn run_regtest(
             (built, RegtestMode::PhaseC)
         }
     };
+
+    // Pack Cube-compatible Assert witness and attach before broadcast.
+    let packed = AssertWitnessV1::new(
+        claim_bytes.clone(),
+        built.opening.clone(),
+        built.h_l_invalid,
+        match eval_mode {
+            RegtestMode::PhaseC => phase_c_flow.share_bundle.clone(),
+            _ => None,
+        },
+    );
+    let blob = packed.encode();
+    // OP_RETURN before signing — outputs are covered by the sighash.
+    attach_op_return_output(&mut built.tx, &blob)?;
     sign_assert_keypath(&mut built.tx, &funding_prev, &funding_kp)?;
+    println!(
+        "regtest: assert_witness_v1 OP_RETURN attached ({} bytes, format={})",
+        blob.len(),
+        crate::witness::FORMAT_V1
+    );
 
     let assert_txid = rpc.send_raw_transaction(&built.tx)?;
     println!("regtest: Assert broadcast {assert_txid}");
     mine(&rpc, 1, &mine_addr)?;
 
-    let eval = match (&built.opening, eval_mode) {
-        (AssertOpening::Direct(o), _) => {
-            PhaseAFlow::new(ClaimMiniBackend).challenger_evaluate(&claim, o, &built.h_l_invalid)
-        }
+    // Challenger: recover opening ONLY from the mined Assert OP_RETURN.
+    // sendrawtransaction txs are not wallet txs — use txindex getrawtransaction.
+    let mined: Transaction = rpc.get_raw_transaction(&assert_txid, None)?;
+    let extracted_blob = extract_from_op_return(&mined)
+        .ok_or("Assert witness blob missing from OP_RETURN")?;
+    let recovered = AssertWitnessV1::decode(&extracted_blob)?;
+    recovered.check_hashlock(&built.h_l_invalid)?;
+    let claim_from_chain = deserialize_claim(&recovered.claim_bytes)?;
+    println!("regtest: recovered assert_witness_v1 from chain (round-trip OK)");
+
+    let eval = match (&recovered.opening, eval_mode) {
+        (AssertOpening::Direct(o), _) => PhaseAFlow::new(ClaimMiniBackend).challenger_evaluate(
+            &claim_from_chain,
+            o,
+            &recovered.statement.h_l_invalid,
+        ),
         (AssertOpening::Adaptor(o), RegtestMode::PhaseC) => {
-            phase_c_flow.challenger_evaluate(&claim, o, &built.h_l_invalid)
+            let flow = if let Some(bundle) = recovered.share_bundle.clone() {
+                PhaseCFlow::with_share_bundle(bundle)
+            } else {
+                phase_c_flow.clone()
+            };
+            flow.challenger_evaluate(&claim_from_chain, o, &recovered.statement.h_l_invalid)
         }
-        (AssertOpening::Adaptor(o), _) => {
-            PhaseBFlow::new(ClaimMiniBackend).challenger_evaluate(&claim, o, &built.h_l_invalid)
-        }
+        (AssertOpening::Adaptor(o), _) => PhaseBFlow::new(ClaimMiniBackend).challenger_evaluate(
+            &claim_from_chain,
+            o,
+            &recovered.statement.h_l_invalid,
+        ),
     };
     let connector_prev = built.tx.output[built.connector_vout as usize].clone();
 

@@ -124,10 +124,10 @@ impl PhaseAFlow<ClaimMiniBackend> {
     }
 }
 
-/// Minimal deterministic serialization for the prototype.
+/// Minimal deterministic serialization for the prototype (208 bytes).
 #[must_use]
 pub fn serialize_claim(claim: &ClaimMini) -> Vec<u8> {
-    let mut buf = Vec::with_capacity(176);
+    let mut buf = Vec::with_capacity(208);
     buf.extend_from_slice(&claim.h_old);
     buf.extend_from_slice(&claim.h_new);
     buf.extend_from_slice(&claim.total_in.to_le_bytes());
@@ -137,6 +137,37 @@ pub fn serialize_claim(claim: &ClaimMini) -> Vec<u8> {
     buf.extend_from_slice(&claim.t3);
     buf.extend_from_slice(&claim.t4);
     buf
+}
+
+/// Inverse of [`serialize_claim`].
+pub fn deserialize_claim(bytes: &[u8]) -> Result<ClaimMini, &'static str> {
+    if bytes.len() != 208 {
+        return Err("claim_bytes must be 208 bytes");
+    }
+    let mut h_old = [0u8; 32];
+    let mut h_new = [0u8; 32];
+    let mut t1 = [0u8; 32];
+    let mut t2 = [0u8; 32];
+    let mut t3 = [0u8; 32];
+    let mut t4 = [0u8; 32];
+    h_old.copy_from_slice(&bytes[0..32]);
+    h_new.copy_from_slice(&bytes[32..64]);
+    let total_in = u64::from_le_bytes(bytes[64..72].try_into().unwrap());
+    let total_out = u64::from_le_bytes(bytes[72..80].try_into().unwrap());
+    t1.copy_from_slice(&bytes[80..112]);
+    t2.copy_from_slice(&bytes[112..144]);
+    t3.copy_from_slice(&bytes[144..176]);
+    t4.copy_from_slice(&bytes[176..208]);
+    Ok(ClaimMini {
+        h_old,
+        h_new,
+        total_in,
+        total_out,
+        t1,
+        t2,
+        t3,
+        t4,
+    })
 }
 
 #[cfg(test)]
