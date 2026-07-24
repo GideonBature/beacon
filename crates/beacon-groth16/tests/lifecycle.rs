@@ -65,3 +65,26 @@ fn groth16_upheld_challenge_still_accepts() {
     let settlement = engine.finalize(id).expect("finalize");
     assert_eq!(settlement.outcome, Outcome::Accepted);
 }
+
+#[test]
+fn groth16_registry_evidence_accepts() {
+    use beacon_groth16::testing::prove_product_parts;
+    use beacon_groth16::{Groth16Statement, VerifyingKeyId, VerifyingKeyRegistry};
+
+    let (vk, proof, product) = prove_product_parts(ProductWitness { a: 4, b: 5 });
+    let mut registry = VerifyingKeyRegistry::new();
+    let vk_id = VerifyingKeyId::new("product-v1");
+    registry.register(vk_id.clone(), vk);
+
+    let evidence = registry
+        .evidence(vk_id, Groth16Statement::new(vec![product]), proof)
+        .unwrap();
+    assert!(evidence.check());
+
+    let mut engine = Engine::new(MockBackend::default());
+    let id = engine
+        .assert(evidence, Deadline::from_raw(2))
+        .expect("assert");
+    engine.backend_mut().set_now(Instant::new(2));
+    assert_eq!(engine.finalize(id).unwrap().outcome, Outcome::Accepted);
+}

@@ -5,7 +5,7 @@
 //! adapter without depending on Cube.
 
 use ark_bn254::{Bn254, Fr};
-use ark_groth16::Groth16;
+use ark_groth16::{Groth16, Proof, VerifyingKey};
 use ark_relations::gr1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError};
 use ark_snark::SNARK;
 use ark_std::rand::{rngs::StdRng, SeedableRng};
@@ -47,11 +47,7 @@ impl ConstraintSynthesizer<Fr> for ProductCircuit {
     }
 }
 
-/// Setup + prove a product instance. Returns evidence and the public product.
-///
-/// Uses a fixed RNG seed so tests are deterministic.
-#[must_use]
-pub fn prove_product(witness: ProductWitness) -> (Groth16Evidence, Fr) {
+fn setup_and_prove(witness: ProductWitness) -> (VerifyingKey<Bn254>, Proof<Bn254>, Fr) {
     let mut rng = StdRng::seed_from_u64(42);
     let a = Fr::from(witness.a);
     let b = Fr::from(witness.b);
@@ -72,16 +68,38 @@ pub fn prove_product(witness: ProductWitness) -> (Groth16Evidence, Fr) {
     )
     .expect("groth16 prove");
 
+    (vk, proof, c)
+}
+
+/// Setup + prove a product instance. Returns evidence and the public product.
+#[must_use]
+pub fn prove_product(witness: ProductWitness) -> (Groth16Evidence, Fr) {
+    let (vk, proof, c) = setup_and_prove(witness);
     let evidence = Groth16Evidence::new(Groth16Statement::new(vec![c]), proof, vk);
     (evidence, c)
+}
+
+/// Like [`prove_product`], but returns VK / proof / public input separately
+/// so callers can exercise [`crate::VerifyingKeyRegistry`].
+#[must_use]
+pub fn prove_product_parts(witness: ProductWitness) -> (VerifyingKey<Bn254>, Proof<Bn254>, Fr) {
+    setup_and_prove(witness)
 }
 
 /// Rebuild evidence with altered public inputs (for negative tests).
 #[must_use]
 pub fn with_public_inputs(evidence: &Groth16Evidence, public_inputs: Vec<Fr>) -> Groth16Evidence {
-    Groth16Evidence::new(
-        Groth16Statement::new(public_inputs),
-        evidence.proof().clone(),
-        evidence.verifying_key().clone(),
-    )
+    match evidence.vk_id().cloned() {
+        Some(id) => Groth16Evidence::with_vk_id(
+            Groth16Statement::new(public_inputs),
+            evidence.proof().clone(),
+            evidence.verifying_key().clone(),
+            id,
+        ),
+        None => Groth16Evidence::new(
+            Groth16Statement::new(public_inputs),
+            evidence.proof().clone(),
+            evidence.verifying_key().clone(),
+        ),
+    }
 }
