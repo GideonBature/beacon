@@ -1,0 +1,22 @@
+stages:
+  - check
+
+rust:
+  stage: check
+  image: rust:1.85
+  before_script:
+    - rustup component add rustfmt clippy
+  variables:
+    CARGO_TERM_COLOR: always
+    RUSTFLAGS: -Dwarnings
+  script:
+    - cargo fmt --all -- --check
+    - cargo clippy --workspace --all-targets -- -D warnings
+    - cargo test --workspace
+    - cargo build -p beacon-cli
+  cache:
+    key: cargo-${CI_COMMIT_REF_SLUG}
+    paths:
+      - target/
+      - $CARGO_HOME/registry/
+      - $CARGO_HOME/git/

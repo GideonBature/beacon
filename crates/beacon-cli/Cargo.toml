@@ -1,0 +1,18 @@
+[package]
+name = "beacon-cli"
+description = "Developer CLI for Beacon"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "beacon"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+beacon-core = { path = "../beacon-core" }
