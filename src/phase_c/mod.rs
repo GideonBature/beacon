@@ -1,8 +1,10 @@
 //! Phase C – VSSS reconstruct + garbled Evaluate.
 //!
 //! - **Phase C MVP**: tiny AND Garble → Evaluate (`evaluate`, `flow`)
+//! - **Ciphertext store**: off-chain CT persistence + hash verify (`ciphertext_store`)
 //! - **Phase C+**: real `garbled_groth16::verify` (`groth16`, `plus`) — prefer `--release`
 
+pub mod ciphertext_store;
 pub mod evaluate;
 pub mod flow;
 pub mod labels;
@@ -11,14 +13,22 @@ pub mod reconstruct;
 #[cfg(feature = "gsv")]
 pub mod groth16;
 #[cfg(feature = "gsv")]
+pub mod persist;
+#[cfg(feature = "gsv")]
 pub mod plus;
 
+pub use ciphertext_store::{CiphertextMeta, CiphertextStore, StoreError};
 pub use evaluate::{commit_l_invalid, evaluate_claim};
 pub use flow::PhaseCFlow;
 pub use labels::{expand_label_bytes, seed_from_label_material};
 pub use reconstruct::{reconstruct_label_seed, ShareBundle};
 
 #[cfg(feature = "gsv")]
-pub use groth16::{Groth16AssertBundle, DEFAULT_K, GROTH16_CAPACITY};
+pub use groth16::{
+    evaluate_bundle_from_store, setup_garble_to_store, Groth16AssertBundle, DEFAULT_K,
+    GROTH16_CAPACITY,
+};
+#[cfg(feature = "gsv")]
+pub use persist::{evaluate_and_from_store, garble_and_to_store, load_and_package, AndEvalPackage};
 #[cfg(feature = "gsv")]
 pub use plus::{PhaseCPlusAssert, PhaseCPlusFlow};

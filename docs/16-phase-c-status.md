@@ -7,10 +7,12 @@
 
 ```
 src/phase_c/
-├── labels.rs       ← expand GSV 16-byte labels → 32-byte L*
-├── reconstruct.rs  ← ShareBundle + seed fold (`gsv-vsss` uses lagrange)
-├── evaluate.rs     ← streaming_garbling → streaming_evaluation (AND toy)
-└── flow.rs         ← adaptor open → reconstruct → Evaluate → Disprove|Timeout
+├── labels.rs            ← expand GSV 16-byte labels → 32-byte L*
+├── reconstruct.rs       ← ShareBundle + seed fold (`gsv-vsss` uses lagrange)
+├── evaluate.rs          ← streaming_garbling → streaming_evaluation (AND toy)
+├── ciphertext_store.rs  ← off-chain CT files + hash verify
+├── persist.rs           ← garble-to-store / evaluate-from-store (gsv)
+└── flow.rs              ← adaptor open → reconstruct → Evaluate → Disprove|Timeout
 ```
 
 | Path | Result |
@@ -58,4 +60,5 @@ cargo test --features gsv-vsss --no-default-features phase_c
 ## Next
 
 - **Phase C+**: done — see [`17-phase-c-plus-status.md`](17-phase-c-plus-status.md)  
-- Still open: production cut-and-choose disk streams, CubeVK proofs, GSV `AdaptorInfo` wire compat
+- **Ciphertext store MVP**: done — see [`19-ciphertext-store.md`](19-ciphertext-store.md)  
+- Still open: multi-instance C&C schedule, Cube VK proofs, GSV `AdaptorInfo` wire compat

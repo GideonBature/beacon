@@ -21,10 +21,11 @@ src/phase_c/
 | Garble | `CircuitBuilder::streaming_garbling(..., garbled_groth16::verify)` |
 | Commit | `H(L_invalid) = SHA256(expand(output.label0))` |
 | Assert | Phase B adaptor opening + Groth16 bundle (off-chain for now) |
-| Evaluate | Re-garble stream + `streaming_evaluation` |
+| Evaluate | Re-garble stream **or** load persisted CT (`evaluate_bundle_from_store`) |
 | Dispute | Valid → Timeout; Invalid → Disprove with `L*` |
 
-Taproot leaves stay unchanged.
+Taproot leaves stay unchanged. CT persist API: `setup_garble_to_store` (see
+[`19-ciphertext-store.md`](19-ciphertext-store.md)).
 
 ## Commands
 
@@ -57,7 +58,8 @@ Use `--k 4` for a quicker smoke; gate count of the *verifier gadget* still domin
 ## What is still not production Cube
 
 - Proof is over `DummyCircuit`, not CubeVM state transitions  
-- Ciphertext stream is ephemeral (channel), not persisted cut-and-choose files  
+- CT can be persisted (`setup_garble_to_store`); proof/VK sidecar serialization still open  
+
 - Multi-instance VSSS C&C (~11B gates / ~43 GB) remains upstream `gsv_vsss`  
 - GSV `AdaptorInfo` (k256 / Fr shares) is not wire-compatible with Phase B yet  
 

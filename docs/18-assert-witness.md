@@ -26,8 +26,10 @@ Assert (open material + commit H(L*))
 Timeout CSV+sig), hashlock semantics, adaptor/extractable opening role.
 
 **What is swappable later:** meaning of `claim_bytes` (Claim Mini → Cube
-publics), ciphertext store, carrier policy (OP_RETURN → reveal-tx / inscription
-if mainnet needs it). Schema version stays `FORMAT_V1` until fields change.
+publics), carrier policy (OP_RETURN → reveal-tx / inscription if mainnet needs
+it). Ciphertext streams stay off-chain in [`CiphertextStore`](19-ciphertext-store.md)
+(optional later: put `ciphertext_hash` in the statement). Schema version stays
+`FORMAT_V1` until fields change.
 
 ## Wire format
 

@@ -34,8 +34,10 @@ pub use phase_a::regtest_tx::{
 };
 pub use phase_b::flow::PhaseBFlow;
 pub use phase_b::opening::AdaptorOpening;
+pub use phase_c::ciphertext_store::{CiphertextMeta, CiphertextStore, StoreError};
 pub use phase_c::flow::PhaseCFlow;
 pub use phase_c::reconstruct::ShareBundle;
+
 pub use witness::{
     attach_op_return_output, attach_to_funding_witness, extract_from_funding_witness,
     extract_from_op_return, AssertWitnessV1, PublicStatement, FORMAT_V1, MAGIC,
@@ -43,5 +45,7 @@ pub use witness::{
 
 #[cfg(feature = "gsv")]
 pub use phase_c::{
-    PhaseCPlusAssert, PhaseCPlusFlow, Groth16AssertBundle, DEFAULT_K, GROTH16_CAPACITY,
+    evaluate_and_from_store, evaluate_bundle_from_store, garble_and_to_store, load_and_package,
+    setup_garble_to_store, AndEvalPackage, Groth16AssertBundle, PhaseCPlusAssert, PhaseCPlusFlow,
+    DEFAULT_K, GROTH16_CAPACITY,
 };

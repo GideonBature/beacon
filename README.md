@@ -99,6 +99,7 @@ Opening
 
 phase_c/
 ├── reconstruct + evaluate ← tiny AND (Phase C)
+├── ciphertext_store       ← off-chain CT + hash verify
 └── groth16 + plus         ← garbled Groth16 (Phase C+)
 ```
 
@@ -124,8 +125,9 @@ H(L_invalid) = SHA256(L*)     # Disprove leaf: OP_SHA256 <H> OP_EQUALVERIFY
 - [x] Phase C – Tiny garbled Evaluate + share bundle
 - [x] Phase C+ – Garbled Groth16 Evaluate smoke
 - [x] Assert witness packing v1 (OP_RETURN + chain round-trip)
+- [x] Ciphertext store MVP (disk CT + hash verify + Evaluate-from-store)
 - [ ] Mainnet policy for large datacarrier / alternate reveal-tx carrier
-- [ ] Production cut-and-choose + ciphertext persistence
+- [ ] Multi-instance cut-and-choose schedule + C+ proof sidecar
 - [ ] Wire GSV `AdaptorInfo` (Fr shares) to Beacon opening
 - [ ] Swap DummyCircuit / Claim Mini for **Cube** VK + proofs
 
@@ -139,6 +141,7 @@ H(L_invalid) = SHA256(L*)     # Disprove leaf: OP_SHA256 <H> OP_EQUALVERIFY
 | [`docs/16-phase-c-status.md`](docs/16-phase-c-status.md) | Phase C |
 | [`docs/17-phase-c-plus-status.md`](docs/17-phase-c-plus-status.md) | Phase C+ |
 | [`docs/18-assert-witness.md`](docs/18-assert-witness.md) | Assert witness packing + Cube alignment |
+| [`docs/19-ciphertext-store.md`](docs/19-ciphertext-store.md) | Off-chain CT persist / C&C |
 | [`docs/12-regtest-guide.md`](docs/12-regtest-guide.md) | Docker / bitcoind |
 | [`docs/14-circuit-backend.md`](docs/14-circuit-backend.md) | Backends + GSV |
 
