@@ -29,6 +29,10 @@ cargo run --example phase_a_driver --no-default-features -- --phase-c --regtest 
 # Real GSV Evaluate (use stock ./target — see docs/16-phase-c-status.md)
 CARGO_TARGET_DIR=./target cargo run --example phase_c_garble --features gsv --no-default-features
 
+# Phase C+ – full garbled Groth16 verify (heavy; --release)
+CARGO_TARGET_DIR=./target cargo run --release --example phase_c_plus --features gsv --no-default-features -- --k 4
+CARGO_TARGET_DIR=./target cargo run --release --example phase_c_plus --features gsv --no-default-features -- --cheat
+
 # Optional: GSV-linked backend (git dep; heavier build)
 cargo run --example gsv_link
 cargo run --example phase_a_driver -- --gsv --cheat
@@ -65,7 +69,7 @@ See [`docs/14-circuit-backend.md`](docs/14-circuit-backend.md).
 - [x] Real `garbled-snark-verifier` linked via git dependency
 - [x] Phase B – Schnorr adaptor extractable opening (`--adaptor`)
 - [x] Phase C – VSSS reconstruct + tiny garbled Evaluate (`--phase-c`)
-- [ ] Phase C+ – full garbled Groth16 Evaluate (upstream release-only)
+- [x] Phase C+ – garbled Groth16 Evaluate (`phase_c_plus`, `--release`)
 
 ## Docs
 

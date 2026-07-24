@@ -20,12 +20,19 @@ name = "phase_c_garble"
 path = "examples/phase_c_garble.rs"
 required-features = ["gsv"]
 
+[[example]]
+name = "phase_c_plus"
+path = "examples/phase_c_plus.rs"
+required-features = ["gsv"]
+
 [features]
 default = ["gsv"]
 # Link BitVM/garbled-snark-verifier from GitHub. That crate is GPL-3.0-only.
 gsv = ["dep:garbled-snark-verifier", "dep:crossbeam", "dep:rand_chacha"]
 # Optional VSSS share reconstruction via upstream `vsss` feature (no SP1 soldering).
 gsv-vsss = ["gsv", "garbled-snark-verifier/vsss", "dep:ark-ff", "dep:ark-secp256k1"]
+# Alias: Phase C+ garbled Groth16 (same as `gsv` today; documents intent).
+gsv-groth16 = ["gsv"]
 
 [dependencies]
 sha2 = "0.10"

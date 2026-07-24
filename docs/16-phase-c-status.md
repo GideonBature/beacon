@@ -55,10 +55,7 @@ cargo test --features gsv-vsss --no-default-features phase_c
 4. `L_invalid = expand(output.label0)` committed in Disprove hashlock  
 5. Challenger Evaluate: active label → Accept or Disprove  
 
-## Explicitly deferred
+## Next
 
-- Full `garbled_groth16::verify` Garble/Evaluate  
-- Production cut-and-choose schedule + ciphertext streams on disk  
-- Wire-compatible GSV `AdaptorInfo` (uses k256 / Fr shares; Beacon Phase B is BIP340 offset)
-
-Those remain upstream / Phase C+ work; the dispute graph and hashlock contract are ready.
+- **Phase C+**: done — see [`17-phase-c-plus-status.md`](17-phase-c-plus-status.md)  
+- Still open: production cut-and-choose disk streams, CubeVK proofs, GSV `AdaptorInfo` wire compat

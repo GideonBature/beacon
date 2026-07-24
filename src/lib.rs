@@ -35,3 +35,8 @@ pub use phase_b::flow::PhaseBFlow;
 pub use phase_b::opening::AdaptorOpening;
 pub use phase_c::flow::PhaseCFlow;
 pub use phase_c::reconstruct::ShareBundle;
+
+#[cfg(feature = "gsv")]
+pub use phase_c::{
+    PhaseCPlusAssert, PhaseCPlusFlow, Groth16AssertBundle, DEFAULT_K, GROTH16_CAPACITY,
+};
