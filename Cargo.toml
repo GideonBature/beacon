@@ -40,6 +40,24 @@ name = "gsv_adaptor"
 path = "examples/gsv_adaptor.rs"
 required-features = ["gsv-vsss"]
 
+[[test]]
+name = "integration_core"
+path = "tests/integration_core.rs"
+
+[[test]]
+name = "integration_gsv"
+path = "tests/integration_gsv.rs"
+required-features = ["gsv"]
+
+[[test]]
+name = "integration_gsv_vsss"
+path = "tests/integration_gsv_vsss.rs"
+required-features = ["gsv-vsss"]
+
+[[test]]
+name = "integration_regtest"
+path = "tests/integration_regtest.rs"
+
 [features]
 default = ["gsv"]
 # Link BitVM/garbled-snark-verifier from GitHub. That crate is GPL-3.0-only.

@@ -39,13 +39,13 @@ pub use phase_c::flow::PhaseCFlow;
 pub use phase_c::reconstruct::{reconstruct_label_seed, ShareBundle};
 pub use phase_c::schedule::{
     check_openings_from_store, commits_from_store, fixed_schedule, open_check_instances,
-    require_eval_committed, sample_schedule, CheckOpening, CutAndChooseParams,
+    require_eval_committed, sample_schedule, validate_schedule, CheckOpening, CutAndChooseParams,
     CutAndChooseSchedule, InstanceCommit, ScheduleError,
 };
 
 pub use witness::{
     attach_op_return_output, attach_to_funding_witness, extract_from_funding_witness,
-    extract_from_op_return, AssertWitnessV1, PublicStatement, FORMAT_V1, MAGIC,
+    extract_from_op_return, AssertWitnessV1, PublicStatement, WitnessError, FORMAT_V1, MAGIC,
 };
 
 #[cfg(feature = "gsv")]

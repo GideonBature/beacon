@@ -47,8 +47,14 @@ Until Cube exposes a Groth16 (or equivalent) verifier key + proofs, Beacon keeps
 ## Quick start
 
 ```bash
-# Fast tests (no GSV)
+# Fast tests (no GSV) — includes integration_core
 cargo test --no-default-features
+
+# Integration suites (see docs/23-integration-tests.md)
+cargo test --test integration_core --no-default-features
+export CARGO_TARGET_DIR=./target
+cargo test --test integration_gsv --features gsv --no-default-features
+cargo test --test integration_gsv_vsss --features gsv-vsss --no-default-features
 
 # Phase A / B / C simulation
 cargo run --example phase_a_driver --no-default-features
@@ -146,6 +152,7 @@ H(L_invalid) = SHA256(L*)     # Disprove leaf: OP_SHA256 <H> OP_EQUALVERIFY
 | [`docs/20-cut-and-choose-schedule.md`](docs/20-cut-and-choose-schedule.md) | C&C schedule + Assert CT hash |
 | [`docs/21-gsv-adaptor-wire.md`](docs/21-gsv-adaptor-wire.md) | GSV Fr-share adaptor (tag 3) |
 | [`docs/22-eval-sidecar.md`](docs/22-eval-sidecar.md) | C+ sidecar + check-set re-garble |
+| [`docs/23-integration-tests.md`](docs/23-integration-tests.md) | Integration suites + coverage stance |
 | [`docs/12-regtest-guide.md`](docs/12-regtest-guide.md) | Docker / bitcoind |
 | [`docs/14-circuit-backend.md`](docs/14-circuit-backend.md) | Backends + GSV |
 
