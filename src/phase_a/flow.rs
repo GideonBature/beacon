@@ -125,7 +125,8 @@ impl PhaseAFlow<ClaimMiniBackend> {
 }
 
 /// Minimal deterministic serialization for the prototype.
-pub(crate) fn serialize_claim(claim: &ClaimMini) -> Vec<u8> {
+#[must_use]
+pub fn serialize_claim(claim: &ClaimMini) -> Vec<u8> {
     let mut buf = Vec::with_capacity(176);
     buf.extend_from_slice(&claim.h_old);
     buf.extend_from_slice(&claim.h_new);

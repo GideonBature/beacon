@@ -15,8 +15,10 @@ pub use backend::{
     hashlock_commit, CircuitBackend, ClaimMiniBackend, EvaluationResult, GarbledSnarkBackend,
 };
 pub use claim_mini::{ClaimMini, OutputWire};
-pub use phase_a::flow::PhaseAFlow;
+pub use phase_a::flow::{serialize_claim, PhaseAFlow};
 pub use phase_a::opening::DirectSeedOpening;
+pub use phase_a::regtest_run::{connect_regtest, run_phase_a_regtest, RegtestOutcome};
 pub use phase_a::regtest_tx::{
-    build_assert_tx, build_disprove_tx, build_timeout_tx, AssertBuildResult,
+    build_assert_tx, build_disprove_tx, build_timeout_tx, p2tr_address, sign_assert_keypath,
+    AssertBuildResult, REGTEST_DISPUTE_WINDOW,
 };

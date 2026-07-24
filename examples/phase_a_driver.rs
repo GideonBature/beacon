@@ -1,22 +1,56 @@
-//! Beacon Phase A driver — switchable circuit backend.
+//! Beacon Phase A driver — simulation or live regtest.
 //!
 //! ```bash
-//! cargo run --example phase_a_driver              # claim-mini
-//! cargo run --example phase_a_driver -- --gsv     # garbled-snark-verifier stand-in
+//! cargo run --example phase_a_driver
+//! cargo run --example phase_a_driver -- --cheat
 //! cargo run --example phase_a_driver -- --gsv --cheat
+//! cargo run --example phase_a_driver -- --regtest
+//! cargo run --example phase_a_driver -- --regtest --cheat
 //! ```
 
 use beacon::{
-    ClaimMini, ClaimMiniBackend, EvaluationResult, GarbledSnarkBackend, PhaseAFlow,
+    run_phase_a_regtest, ClaimMini, ClaimMiniBackend, EvaluationResult, GarbledSnarkBackend,
+    PhaseAFlow, RegtestOutcome,
 };
 use std::env;
+use std::process;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
     let cheat = args.iter().any(|a| a == "--cheat");
     let use_gsv = args.iter().any(|a| a == "--gsv");
+    let regtest = args.iter().any(|a| a == "--regtest");
 
     println!("=== Beacon Phase A Driver ===\n");
+
+    if regtest {
+        if use_gsv {
+            eprintln!("note: --regtest currently uses ClaimMiniBackend (on-chain path is backend-agnostic)");
+        }
+        match run_phase_a_regtest(cheat) {
+            Ok(RegtestOutcome::Accepted {
+                assert_txid,
+                timeout_txid,
+            }) => {
+                println!("\nPASS Accepted");
+                println!("  assert_txid={assert_txid}");
+                println!("  timeout_txid={timeout_txid}");
+            }
+            Ok(RegtestOutcome::Rejected {
+                assert_txid,
+                disprove_txid,
+            }) => {
+                println!("\nPASS Rejected (challenger Disprove)");
+                println!("  assert_txid={assert_txid}");
+                println!("  disprove_txid={disprove_txid}");
+            }
+            Err(e) => {
+                eprintln!("regtest failed: {e}");
+                process::exit(1);
+            }
+        }
+        return;
+    }
 
     let mut claim = ClaimMini::make_valid(
         [0x01; 32],
@@ -36,13 +70,13 @@ fn main() {
     }
 
     if use_gsv {
-        run(PhaseAFlow::new(GarbledSnarkBackend), &claim);
+        run_sim(PhaseAFlow::new(GarbledSnarkBackend), &claim);
     } else {
-        run(PhaseAFlow::new(ClaimMiniBackend), &claim);
+        run_sim(PhaseAFlow::new(ClaimMiniBackend), &claim);
     }
 }
 
-fn run<B: beacon::CircuitBackend<Claim = ClaimMini>>(flow: PhaseAFlow<B>, claim: &ClaimMini) {
+fn run_sim<B: beacon::CircuitBackend<Claim = ClaimMini>>(flow: PhaseAFlow<B>, claim: &ClaimMini) {
     println!("backend={}", flow.backend().name());
 
     let (_assert_tmpl, opening, h_l_invalid) =

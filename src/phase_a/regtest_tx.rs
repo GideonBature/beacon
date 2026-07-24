@@ -1,65 +1,67 @@
-//! Phase A – Real Bitcoin transaction builders (regtest-ready)
+//! Phase A – Taproot Assert / Disprove / Timeout builders with real signatures.
 //!
-//! These construct actual Taproot transactions for:
-//!   - Assert   (connector with Disprove hashlock + Timeout CSV)
-//!   - Disprove (spend connector with L_invalid)
-//!   - Timeout  (spend connector after relative timelock)
-//!
-//! They do not talk to a node yet; they produce fully signed (or signable)
-//! `bitcoin::Transaction` values that can be broadcast on regtest.
+//! Connector = Taproot (NUMS internal key) with two script leaves:
+//! - Disprove: `OP_SHA256 <H(L*)> OP_EQUALVERIFY OP_TRUE`
+//! - Timeout:  `<Δ> OP_CSV OP_DROP <engine_xonly> OP_CHECKSIG`
 
-use bitcoin::key::Keypair;
+use bitcoin::hashes::Hash;
+use bitcoin::key::{Keypair, TapTweak};
 use bitcoin::script::{Builder, PushBytesBuf, ScriptBuf};
-use bitcoin::secp256k1::Secp256k1;
-use bitcoin::taproot::{LeafVersion, TaprootBuilder, TaprootSpendInfo};
+use bitcoin::secp256k1::{Message, Secp256k1, XOnlyPublicKey};
+use bitcoin::sighash::{Prevouts, SighashCache, TapSighashType};
+use bitcoin::taproot::{LeafVersion, TapLeafHash, TaprootBuilder, TaprootSpendInfo};
 use bitcoin::transaction::{OutPoint, Transaction, TxIn, TxOut, Version};
 use bitcoin::{absolute, Address, Amount, Network, Sequence, Txid, Witness};
 
 use crate::phase_a::opening::DirectSeedOpening;
 use crate::tx_templates::DEFAULT_DISPUTE_WINDOW;
 
+/// Short relative lock for regtest demos (mine this many blocks after Assert).
+pub const REGTEST_DISPUTE_WINDOW: u32 = 2;
+
+/// BIP-341 recommended nothing-up-my-sleeve x-only pubkey (script-path only).
+const NUMS_H: [u8; 32] = [
+    0x50, 0x92, 0x9b, 0x74, 0xc1, 0xa0, 0x49, 0x54, 0xb7, 0x8b, 0x4b, 0x60, 0x35, 0xe9, 0x7a, 0x5e,
+    0x07, 0x8a, 0x5a, 0x0f, 0x28, 0xec, 0x96, 0xd5, 0x47, 0xbf, 0xee, 0x9a, 0xce, 0x80, 0x3a, 0xc0,
+];
+
 /// Everything needed to build and later spend the Assert connector.
 pub struct AssertBuildResult {
     pub tx: Transaction,
     pub connector_vout: u32,
+    pub connector_amount: Amount,
     pub taproot_spend_info: TaprootSpendInfo,
     pub h_l_invalid: [u8; 32],
     pub opening: DirectSeedOpening,
-    /// The internal key used for the Taproot (Engine’s key in this prototype).
-    pub internal_keypair: Keypair,
+    pub dispute_window: u32,
+    /// Engine key that can take the Timeout script path.
+    pub engine_keypair: Keypair,
 }
 
-/// Build the Assert transaction.
-///
-/// - `funding`: outpoint + amount + script_pubkey of the UTXO we are spending
-/// - `engine_keypair`: key that will be able to take the Timeout path
-/// - `claim_bytes`: serialized claim (used to derive the Phase A seed)
-/// - `h_l_invalid`: the 32-byte commitment that goes into the Disprove leaf
-/// - `connector_amount`: how many sats go into the connector output
-/// - `change_address`: where to send the change
+fn nums_internal_key() -> XOnlyPublicKey {
+    XOnlyPublicKey::from_slice(&NUMS_H).expect("BIP-341 NUMS key")
+}
+
+/// Build an unsigned Assert transaction (caller signs the funding input).
 pub fn build_assert_tx(
     funding_outpoint: OutPoint,
     funding_amount: Amount,
-    _funding_script_pubkey: ScriptBuf,
     engine_keypair: &Keypair,
     claim_bytes: &[u8],
     h_l_invalid: [u8; 32],
     connector_amount: Amount,
     change_address: &Address,
-    _network: Network,
+    dispute_window: u32,
+    fee: Amount,
 ) -> Result<AssertBuildResult, Box<dyn std::error::Error>> {
     let secp = Secp256k1::new();
-
     let disprove_script = disprove_leaf_script(&h_l_invalid)?;
-    let timeout_script = timeout_leaf_script(engine_keypair)?;
+    let timeout_script = timeout_leaf_script(engine_keypair, dispute_window)?;
 
-    let internal_keypair = Keypair::new(&secp, &mut rand::thread_rng());
-    let internal_key = internal_keypair.x_only_public_key().0;
-
+    let internal_key = nums_internal_key();
     let builder = TaprootBuilder::new()
         .add_leaf(1, disprove_script)?
         .add_leaf(1, timeout_script)?;
-
     let spend_info = builder
         .finalize(&secp, internal_key)
         .map_err(|_| "taproot finalize failed")?;
@@ -70,7 +72,7 @@ pub fn build_assert_tx(
     let change_amount = funding_amount
         .checked_sub(connector_amount)
         .ok_or("insufficient funds")?
-        .checked_sub(Amount::from_sat(500)) // rough fee
+        .checked_sub(fee)
         .ok_or("insufficient funds for fee")?;
 
     let tx = Transaction {
@@ -94,23 +96,44 @@ pub fn build_assert_tx(
         ],
     };
 
-    // For the prototype we leave the input unsigned; the caller can sign
-    // with the funding key.  In a full implementation we would sign here.
-
     let opening = DirectSeedOpening::from_claim_bytes(0, claim_bytes);
 
     Ok(AssertBuildResult {
         tx,
         connector_vout: 0,
+        connector_amount,
         taproot_spend_info: spend_info,
         h_l_invalid,
         opening,
-        internal_keypair,
+        dispute_window,
+        engine_keypair: *engine_keypair,
     })
 }
 
-/// Build the Disprove transaction that spends the Assert connector
-/// with the hashlock leaf by revealing `l_invalid`.
+/// Sign Assert funding input (P2TR key-path, no script merkle root).
+pub fn sign_assert_keypath(
+    tx: &mut Transaction,
+    funding_prevout: &TxOut,
+    funding_keypair: &Keypair,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let secp = Secp256k1::new();
+    let tweaked = funding_keypair.tap_tweak(&secp, None);
+    let prevouts = Prevouts::All(std::slice::from_ref(funding_prevout));
+    let sighash_type = TapSighashType::Default;
+    let sighash = SighashCache::new(&*tx).taproot_key_spend_signature_hash(
+        0,
+        &prevouts,
+        sighash_type,
+    )?;
+    let msg = Message::from_digest(sighash.to_byte_array());
+    let sig = secp.sign_schnorr_no_aux_rand(&msg, &tweaked.to_keypair());
+    let mut witness = Witness::new();
+    witness.push(sig.as_ref());
+    tx.input[0].witness = witness;
+    Ok(())
+}
+
+/// Build Disprove (hashlock leaf — no signature required).
 pub fn build_disprove_tx(
     assert_txid: Txid,
     assert_vout: u32,
@@ -122,7 +145,6 @@ pub fn build_disprove_tx(
     fee: Amount,
 ) -> Result<Transaction, Box<dyn std::error::Error>> {
     let disprove_script = disprove_leaf_script(&h_l_invalid)?;
-
     let control_block = spend_info
         .control_block(&(disprove_script.clone(), LeafVersion::TapScript))
         .ok_or("control block for disprove leaf not found")?;
@@ -147,34 +169,38 @@ pub fn build_disprove_tx(
         }],
     };
 
-    // Witness stack for script-path spend of the Disprove leaf:
-    //   <L_invalid>  <disprove_script>  <control_block>
     let mut witness = Witness::new();
     witness.push(l_invalid);
     witness.push(disprove_script.as_bytes());
     witness.push(control_block.serialize());
     tx.input[0].witness = witness;
-
     Ok(tx)
 }
 
-/// Build the Timeout transaction (Engine spends after relative timelock).
+/// Build and Schnorr-sign the Timeout script-path spend.
 pub fn build_timeout_tx(
     assert_txid: Txid,
     assert_vout: u32,
-    connector_amount: Amount,
+    connector_prevout: &TxOut,
     engine_keypair: &Keypair,
     spend_info: &TaprootSpendInfo,
     engine_address: &Address,
+    dispute_window: u32,
     fee: Amount,
 ) -> Result<Transaction, Box<dyn std::error::Error>> {
-    let timeout_script = timeout_leaf_script(engine_keypair)?;
-
+    let secp = Secp256k1::new();
+    let timeout_script = timeout_leaf_script(engine_keypair, dispute_window)?;
     let control_block = spend_info
         .control_block(&(timeout_script.clone(), LeafVersion::TapScript))
         .ok_or("control block for timeout leaf not found")?;
 
-    let output_amount = connector_amount.checked_sub(fee).ok_or("fee too high")?;
+    let output_amount = connector_prevout
+        .value
+        .checked_sub(fee)
+        .ok_or("fee too high")?;
+
+    let window_u16 =
+        u16::try_from(dispute_window).map_err(|_| "dispute_window exceeds u16")?;
 
     let mut tx = Transaction {
         version: Version::TWO,
@@ -185,8 +211,7 @@ pub fn build_timeout_tx(
                 vout: assert_vout,
             },
             script_sig: ScriptBuf::new(),
-            // Sequence must encode the relative timelock
-            sequence: Sequence::from_height(DEFAULT_DISPUTE_WINDOW as u16),
+            sequence: Sequence::from_height(window_u16),
             witness: Witness::new(),
         }],
         output: vec![TxOut {
@@ -195,21 +220,32 @@ pub fn build_timeout_tx(
         }],
     };
 
-    // For a real signature we would use SighashCache here.
-    // In this prototype we leave a placeholder; the caller can sign.
-    // Witness stack for the Timeout leaf:
-    //   <signature>  <timeout_script>  <control_block>
+    let leaf_hash = TapLeafHash::from_script(&timeout_script, LeafVersion::TapScript);
+    let prevouts = Prevouts::All(std::slice::from_ref(connector_prevout));
+    let sighash_type = TapSighashType::Default;
+    let sighash = SighashCache::new(&tx).taproot_script_spend_signature_hash(
+        0,
+        &prevouts,
+        leaf_hash,
+        sighash_type,
+    )?;
+    let msg = Message::from_digest(sighash.to_byte_array());
+    let sig = secp.sign_schnorr_no_aux_rand(&msg, engine_keypair);
+
     let mut witness = Witness::new();
-    // placeholder signature (64 bytes of zeros) – replace with real sig
-    witness.push([0u8; 64]);
+    witness.push(sig.as_ref());
     witness.push(timeout_script.as_bytes());
     witness.push(control_block.serialize());
     tx.input[0].witness = witness;
-
     Ok(tx)
 }
 
-/// Leaf 0: Disprove – `OP_SHA256 <H(L_invalid)> OP_EQUALVERIFY OP_TRUE`
+/// Convenience: default dispute window (mainnet-ish).
+#[must_use]
+pub fn default_dispute_window() -> u32 {
+    DEFAULT_DISPUTE_WINDOW
+}
+
 fn disprove_leaf_script(h_l_invalid: &[u8; 32]) -> Result<ScriptBuf, Box<dyn std::error::Error>> {
     let push = PushBytesBuf::try_from(h_l_invalid.to_vec()).map_err(|_| "hash push")?;
     Ok(Builder::new()
@@ -220,15 +256,120 @@ fn disprove_leaf_script(h_l_invalid: &[u8; 32]) -> Result<ScriptBuf, Box<dyn std
         .into_script())
 }
 
-/// Leaf 1: Timeout – `<Δ> OP_CSV OP_DROP <pubkey> OP_CHECKSIG`
-fn timeout_leaf_script(engine_keypair: &Keypair) -> Result<ScriptBuf, Box<dyn std::error::Error>> {
+fn timeout_leaf_script(
+    engine_keypair: &Keypair,
+    dispute_window: u32,
+) -> Result<ScriptBuf, Box<dyn std::error::Error>> {
+    if dispute_window == 0 {
+        return Err("dispute_window must be > 0".into());
+    }
     let engine_xonly = engine_keypair.x_only_public_key().0;
-    let pk_push = PushBytesBuf::try_from(engine_xonly.serialize().to_vec()).map_err(|_| "pk push")?;
+    let pk_push =
+        PushBytesBuf::try_from(engine_xonly.serialize().to_vec()).map_err(|_| "pk push")?;
     Ok(Builder::new()
-        .push_int(i64::from(DEFAULT_DISPUTE_WINDOW))
+        .push_int(i64::from(dispute_window))
         .push_opcode(bitcoin::opcodes::all::OP_CSV)
         .push_opcode(bitcoin::opcodes::all::OP_DROP)
         .push_slice(pk_push)
         .push_opcode(bitcoin::opcodes::all::OP_CHECKSIG)
         .into_script())
+}
+
+/// P2TR address for a keypair (key-path only).
+#[must_use]
+pub fn p2tr_address(keypair: &Keypair, network: Network) -> Address {
+    let secp = Secp256k1::new();
+    let (xonly, _parity) = keypair.x_only_public_key();
+    Address::p2tr(&secp, xonly, None, network)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bitcoin::key::Keypair;
+    use bitcoin::Network;
+    use rand::thread_rng;
+
+    #[test]
+    fn timeout_has_real_schnorr_sig() {
+        let secp = Secp256k1::new();
+        let engine = Keypair::new(&secp, &mut thread_rng());
+        let funding = Keypair::new(&secp, &mut thread_rng());
+        let change = p2tr_address(&funding, Network::Regtest);
+
+        let mut assert_res = build_assert_tx(
+            OutPoint::null(),
+            Amount::from_sat(100_000),
+            &engine,
+            b"claim",
+            [0x11; 32],
+            Amount::from_sat(50_000),
+            &change,
+            REGTEST_DISPUTE_WINDOW,
+            Amount::from_sat(500),
+        )
+        .unwrap();
+
+        let funding_prev = TxOut {
+            value: Amount::from_sat(100_000),
+            script_pubkey: p2tr_address(&funding, Network::Regtest).script_pubkey(),
+        };
+        sign_assert_keypath(&mut assert_res.tx, &funding_prev, &funding).unwrap();
+        assert_eq!(assert_res.tx.input[0].witness.len(), 1);
+        assert_eq!(assert_res.tx.input[0].witness.nth(0).unwrap().len(), 64);
+        assert_ne!(assert_res.tx.input[0].witness.nth(0).unwrap(), &[0u8; 64]);
+
+        let connector = &assert_res.tx.output[0];
+        let timeout = build_timeout_tx(
+            assert_res.tx.compute_txid(),
+            0,
+            connector,
+            &engine,
+            &assert_res.taproot_spend_info,
+            &p2tr_address(&engine, Network::Regtest),
+            REGTEST_DISPUTE_WINDOW,
+            Amount::from_sat(500),
+        )
+        .unwrap();
+        assert_eq!(timeout.input[0].witness.len(), 3);
+        assert_eq!(timeout.input[0].witness.nth(0).unwrap().len(), 64);
+        assert_ne!(timeout.input[0].witness.nth(0).unwrap(), &[0u8; 64]);
+    }
+
+    #[test]
+    fn disprove_witness_is_hashlock_only() {
+        let secp = Secp256k1::new();
+        let engine = Keypair::new(&secp, &mut thread_rng());
+        let funding = Keypair::new(&secp, &mut thread_rng());
+        let l = [0xAB; 32];
+        let h = {
+            use sha2::{Digest, Sha256};
+            Sha256::digest(l).into()
+        };
+        let assert_res = build_assert_tx(
+            OutPoint::null(),
+            Amount::from_sat(20_000),
+            &engine,
+            b"x",
+            h,
+            Amount::from_sat(10_000),
+            &p2tr_address(&funding, Network::Regtest),
+            REGTEST_DISPUTE_WINDOW,
+            Amount::from_sat(500),
+        )
+        .unwrap();
+        let d = build_disprove_tx(
+            assert_res.tx.compute_txid(),
+            0,
+            Amount::from_sat(10_000),
+            l,
+            h,
+            &assert_res.taproot_spend_info,
+            &p2tr_address(&funding, Network::Regtest),
+            Amount::from_sat(500),
+        )
+        .unwrap();
+        assert_eq!(d.input[0].witness.len(), 3);
+        assert_eq!(d.input[0].witness.nth(0).unwrap(), l);
+    }
 }

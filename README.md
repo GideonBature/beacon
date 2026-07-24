@@ -8,14 +8,20 @@ Target cryptographic backend: [BitVM/garbled-snark-verifier](https://github.com/
 ## Quick start
 
 ```bash
-cargo test
-cargo run --example gsv_link                    # prove GSV crate is linked
-cargo run --example phase_a_driver              # claim-mini
-cargo run --example phase_a_driver -- --gsv     # GSV-backed backend
-cargo run --example phase_a_driver -- --gsv --cheat
-
-# Without GSV (Claim Mini only)
 cargo test --no-default-features
+cargo run --example phase_a_driver              # simulation
+cargo run --example phase_a_driver -- --cheat
+
+# Live Phase A on regtest (Docker Desktop — see docs/12-regtest-guide.md)
+cp docker-compose.example.yml docker-compose.yml   # gitignored local copy
+docker compose up -d
+export BEACON_RPC_URL=http://127.0.0.1:18443 BEACON_RPC_USER=beacon BEACON_RPC_PASS=beacon
+cargo run --example phase_a_driver --no-default-features -- --regtest
+cargo run --example phase_a_driver --no-default-features -- --regtest --cheat
+
+# Optional: GSV-linked backend (git dep; heavier build)
+cargo run --example gsv_link
+cargo run --example phase_a_driver -- --gsv --cheat
 ```
 
 ## Circuit backends
@@ -44,9 +50,9 @@ See [`docs/14-circuit-backend.md`](docs/14-circuit-backend.md).
 - [x] Claim Mini circuit + `L*` fraud secret
 - [x] Pluggable `CircuitBackend` + `--gsv` driver switch
 - [x] Hashlock-correct `SHA256(L*)` commitment
-- [x] Taproot Assert / Disprove / Timeout tx builders (unsigned placeholders)
+- [x] Taproot Assert / Disprove / Timeout with real Schnorr signatures
+- [x] Live regtest runner (`--regtest` / `--regtest --cheat`)
 - [x] Real `garbled-snark-verifier` linked via git dependency
-- [ ] Full Taproot signing + regtest broadcast
 - [ ] Phase B – adaptor signatures
 - [ ] Phase C – VSSS + full garbled Groth16 Evaluate
 

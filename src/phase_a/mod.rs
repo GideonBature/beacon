@@ -1,8 +1,8 @@
 //! Phase A – Minimal end-to-end prototype
 //!
-//! Direct seed opening + real Bitcoin transaction builders.
-//! Ready to be driven against a regtest node.
+//! Direct seed opening + signed Taproot builders + optional regtest runner.
 
-pub mod opening;
 pub mod flow;
+pub mod opening;
+pub mod regtest_run;
 pub mod regtest_tx;

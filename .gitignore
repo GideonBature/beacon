@@ -3,3 +3,8 @@
 .idea/
 .vscode/
 *.swp
+
+# Local Docker regtest (not committed)
+docker-compose.yml
+docker-compose.override.yml
+docker/bitcoin-data/
