@@ -68,7 +68,7 @@ pub(crate) fn print_journal(journal: &[SimulatedTx]) {
     }
 }
 
-/// Compile Assert/Withdraw templates to Script skeletons; note unsupported intents.
+/// Compile journal templates to Script skeletons (every [`ScriptIntent`](beacon_bitcoin::ScriptIntent)).
 pub(crate) fn print_compiled(journal: &[SimulatedTx]) {
     println!("\ncompiled scripts:");
     for (txid, result) in compile_journal(journal) {

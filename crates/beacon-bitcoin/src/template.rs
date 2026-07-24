@@ -1,8 +1,7 @@
 //! Structured transaction templates for the Bitcoin dispute graph (RFC-0006).
 //!
 //! Templates describe *what* a Bitcoin backend must realize. See [`crate::compile`]
-//! for Assert/Withdraw Script + transaction skeletons. Challenge / Disprove /
-//! Punish intents remain template-only until their Script policies land.
+//! for Script + transaction skeletons for every [`ScriptIntent`].
 
 use beacon_core::{AssertionId, ChallengerId, Instant};
 

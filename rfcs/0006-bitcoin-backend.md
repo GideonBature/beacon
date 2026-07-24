@@ -1,6 +1,6 @@
 # RFC-0006: Bitcoin Backend
 
-- **Status:** Draft (templates + Assert/Withdraw Script compile)
+- **Status:** Draft (templates + full ScriptIntent compile)
 - **Depends on:** RFC-0005, RFC-0004
 - **Implementation:** `crates/beacon-bitcoin`
 
@@ -18,6 +18,9 @@ Bitcoin `DisputeBackend` realizes it.
 
 1. Delegating lifecycle + `Verifiable::check` to the mock engine.
 2. Recording a simulated transaction journal with structured **templates**.
+3. Compiling each [`ScriptIntent`](../crates/beacon-bitcoin/src/template.rs) to
+   offline `bitcoin` crate Script / Transaction skeletons via
+   [`compile`](../crates/beacon-bitcoin/src/compile.rs).
 
 ### Journal mapping
 
@@ -41,12 +44,17 @@ Each [`TxTemplate`](../crates/beacon-bitcoin/src/template.rs) carries:
 Journal entries also include deterministic `txid`, optional `locktime`, and
 `prev_txid`.
 
-`ScriptIntent` is compiled by [`compile`](../crates/beacon-bitcoin/src/compile.rs)
-for **Assert** and **Withdraw** into real `bitcoin` crate `Script` /
-`Transaction` skeletons (OP_RETURN commit + CLTV placeholders). Challenge /
-Disprove / Punish compilation is still `UnsupportedIntent`.
+### Compiled Script policies (v1 placeholders)
 
-No broadcasting, wallet, or BitVM3 yet.
+| `ScriptIntent` | Skeleton |
+|----------------|----------|
+| `AssertCommit` | `OP_RETURN` (`BEACON/ASSERT/v1` ∥ assertion id) + CLTV/`OP_TRUE` bond |
+| `ChallengeOpen` | `OP_RETURN` (`BEACON/CHALLENGE/v1` ∥ assertion ∥ challenger commit) + CLTV bond |
+| `DisproveHashlock` | `OP_HASH160 <h> OP_EQUAL` (`h` = HASH160 of deterministic preimage material) |
+| `WithdrawTimeout` | `<height> CLTV DROP TRUE` |
+| `PunishBond` | `OP_RETURN` (`BEACON/PUNISH/v1` ∥ …) + `OP_TRUE` payout |
+
+No broadcasting, wallet, Taproot keys, or BitVM3 yet — placeholders only.
 
 ## Non-goals (still)
 
@@ -67,8 +75,8 @@ No broadcasting, wallet, or BitVM3 yet.
 
 ## Open
 
-- Challenge / Disprove / Punish Script policies (beyond `UnsupportedIntent`)
-- Replace placeholders (`OP_TRUE`, raw CLTV) with Taproot / keyed spends
+- Replace placeholders (`OP_TRUE`, raw CLTV, deterministic hashlocks) with
+  Taproot / keyed spends and real BitVM3 secrets
 - Replace mock `check()` with on-chain-enforceable dispute artifacts
 - Async challenge resolution (separate Challenge vs Disprove broadcasts)
 - Bond economics beyond `value_sats` placeholders

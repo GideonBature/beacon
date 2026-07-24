@@ -23,9 +23,10 @@
 //! - Verification still uses [`Verifiable::check`](beacon_core::Verifiable::check)
 //!   via the embedded [`MockBackend`](beacon_mock::MockBackend)
 //!
-//! Assert / Withdraw templates **do** compile to offline `bitcoin` crate Script /
-//! Transaction skeletons via [`compile`] / [`compile_journal`]. Challenge /
-//! Disprove / Punish remain template-only for now.
+//! Assert / Withdraw / Challenge / Disprove / Punish templates compile to
+//! offline `bitcoin` crate Script / Transaction skeletons via [`compile`] /
+//! [`compile_journal`]. Placeholders (`OP_TRUE`, raw CLTV, deterministic
+//! hashlocks) stand in for keys and `BitVM3` secrets.
 
 #![forbid(unsafe_code)]
 
@@ -40,7 +41,10 @@ use beacon_core::{
 use beacon_events::{ChallengeResult, Event, RecordingSink};
 use beacon_mock::{AssertionView, MockBackend, MockConfig};
 
-pub use compile::{compile, compile_journal, CompileError, CompiledTx, ASSERT_COMMIT_TAG};
+pub use compile::{
+    compile, compile_journal, CompileError, CompiledTx, ASSERT_COMMIT_TAG, CHALLENGE_OPEN_TAG,
+    PUNISH_BOND_TAG,
+};
 pub use template::{ScriptIntent, TxTemplate};
 pub use tx::{SimulatedTx, TxKind, Txid};
 
