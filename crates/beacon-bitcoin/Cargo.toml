@@ -1,0 +1,16 @@
+[package]
+name = "beacon-bitcoin"
+description = "Bitcoin-shaped DisputeBackend skeleton for Beacon (simulated chain journal; no BitVM3 yet)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+beacon-core = { path = "../beacon-core" }
+beacon-events = { path = "../beacon-events" }
+beacon-mock = { path = "../beacon-mock" }

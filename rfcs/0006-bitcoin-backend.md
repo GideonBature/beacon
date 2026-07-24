@@ -1,8 +1,8 @@
 # RFC-0006: Bitcoin Backend
 
-- **Status:** Placeholder
+- **Status:** Draft (skeleton)
 - **Depends on:** RFC-0005, RFC-0004
-- **Phase:** 5–6 (after Mock)
+- **Implementation:** `crates/beacon-bitcoin` (simulated journal)
 
 ## Intent
 
@@ -12,16 +12,34 @@ disprovable verification (garbled verifier, label secrets, hashlocks/timelocks).
 This RFC MUST NOT redefine the Assertion lifecycle. It only specifies how a
 Bitcoin `DisputeBackend` realizes it.
 
-## Non-goals for now
+## Skeleton (current)
 
-- Normative tx templates (until Phase 0–2 freeze core protocol)
-- Choosing a specific garbling scheme
+`beacon-bitcoin` implements `DisputeBackend` by:
+
+1. Delegating lifecycle + `Verifiable::check` to the mock engine (same tests).
+2. Appending a **simulated** transaction journal:
+
+| Protocol | `TxKind` |
+|----------|----------|
+| T1 Asserted | `Assert` |
+| T3 Disputing | `Challenge` |
+| Evidence invalid (sync) | `Disprove` |
+| T2 / T5 Accepted | `Withdraw` |
+| T4 Rejected | `Punish` |
+
+No real Bitcoin, scripts, or BitVM3 yet.
+
+## Non-goals (still)
+
+- Normative tx templates / PSBTs
+- Choosing a garbling scheme
 - Bridge or Cube application flows
+- Network / mempool / wallet integration
 
-## Anticipated mapping (informative)
+## Anticipated real mapping
 
-| RFC-0004 | Bitcoin-shaped analogue |
-|----------|-------------------------|
+| RFC-0004 | On-chain analogue |
+|----------|-------------------|
 | T1 Asserted | Assert / commit transaction |
 | T3 Disputing | Challenge transaction |
 | T4 Rejected | Disprove / punish path |
@@ -30,4 +48,6 @@ Bitcoin `DisputeBackend` realizes it.
 
 ## Open
 
-Full write-up after Mock semantics and state machine open questions are closed.
+- Replace mock `check()` with BitVM3-style dispute artifacts
+- Concrete Taproot / hashlock / timelock templates
+- Whether `Disprove` is a separate broadcast from `Challenge` in async settings

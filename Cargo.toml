@@ -6,6 +6,7 @@ members = [
     "crates/beacon-mock",
     "crates/beacon-cli",
     "crates/beacon-groth16",
+    "crates/beacon-bitcoin",
 ]
 default-members = [
     "crates/beacon-core",
@@ -13,6 +14,7 @@ default-members = [
     "crates/beacon-mock",
     "crates/beacon-cli",
     "crates/beacon-groth16",
+    "crates/beacon-bitcoin",
 ]
 
 [workspace.package]

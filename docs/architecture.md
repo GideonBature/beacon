@@ -109,7 +109,8 @@ crates/
   beacon-events
   beacon-mock
   beacon-cli
-  # later: beacon-bitcoin, proof-system adapters
+  beacon-groth16
+  beacon-bitcoin   # simulated journal skeleton (RFC-0006)
 ```
 
 ## Phase plan
@@ -117,9 +118,7 @@ crates/
 | Phase | Deliverable |
 |-------|-------------|
 | **0** | RFCs / architecture (done) |
-| **1a** | Workspace skeleton (this commit) |
-| **1b** | Domain types in `beacon-core` |
-| **1c** | `MockBackend` + lifecycle tests |
-| **2+** | Events, Groth16 adapter, Bitcoin backend |
-
-Reuse evaluation for non-Cube apps is **after** Cube’s slice works.
+| **1** | Domain types, mock lifecycle, events, CLI |
+| **2** | Groth16 `Verifiable` + VK registry |
+| **3** | `beacon-bitcoin` skeleton (same lifecycle, tx journal) |
+| **4+** | Real Bitcoin / BitVM3-style dispute behind the same API |
