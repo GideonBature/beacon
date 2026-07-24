@@ -852,6 +852,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "ark-secp256k1"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f8bd211c48debd3037b48873a7aa22c3aba034e83388aa4124795c9f220b88c7"
+dependencies = [
+ "ark-ec",
+ "ark-ff 0.5.0",
+ "ark-std 0.5.0",
+]
+
+[[package]]
 name = "ark-serialize"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1606,11 +1617,15 @@ checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
 name = "beacon"
 version = "0.1.0"
 dependencies = [
+ "ark-ff 0.5.0",
+ "ark-secp256k1",
  "bitcoin",
  "bitcoincore-rpc",
+ "crossbeam",
  "garbled-snark-verifier",
  "hex",
  "rand 0.8.7",
+ "rand_chacha 0.3.1",
  "secp256k1 0.29.1",
  "serde",
  "serde_json",
@@ -3054,6 +3069,7 @@ dependencies = [
  "ark-ff 0.5.0",
  "ark-groth16",
  "ark-relations",
+ "ark-secp256k1",
  "ark-serialize 0.5.0",
  "ark-snark",
  "ark-std 0.5.0",

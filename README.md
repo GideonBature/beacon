@@ -23,6 +23,12 @@ cargo run --example phase_a_driver --no-default-features -- --regtest --cheat
 cargo run --example phase_a_driver --no-default-features -- --adaptor
 cargo run --example phase_a_driver --no-default-features -- --adaptor --regtest --cheat
 
+# Phase C – VSSS reconstruct + garbled Evaluate (tiny AND MVP)
+cargo run --example phase_a_driver --no-default-features -- --phase-c --cheat
+cargo run --example phase_a_driver --no-default-features -- --phase-c --regtest --cheat
+# Real GSV Evaluate (use stock ./target — see docs/16-phase-c-status.md)
+CARGO_TARGET_DIR=./target cargo run --example phase_c_garble --features gsv --no-default-features
+
 # Optional: GSV-linked backend (git dep; heavier build)
 cargo run --example gsv_link
 cargo run --example phase_a_driver -- --gsv --cheat
@@ -58,7 +64,8 @@ See [`docs/14-circuit-backend.md`](docs/14-circuit-backend.md).
 - [x] Live regtest runner (`--regtest` / `--regtest --cheat`)
 - [x] Real `garbled-snark-verifier` linked via git dependency
 - [x] Phase B – Schnorr adaptor extractable opening (`--adaptor`)
-- [ ] Phase C – VSSS + full garbled Groth16 Evaluate
+- [x] Phase C – VSSS reconstruct + tiny garbled Evaluate (`--phase-c`)
+- [ ] Phase C+ – full garbled Groth16 Evaluate (upstream release-only)
 
 ## Docs
 

@@ -8,11 +8,14 @@
 //! cargo run --example phase_a_driver -- --gsv --cheat
 //! cargo run --example phase_a_driver -- --regtest
 //! cargo run --example phase_a_driver -- --adaptor --regtest --cheat
+//! cargo run --example phase_a_driver -- --phase-c
+//! cargo run --example phase_a_driver -- --phase-c --cheat
 //! ```
 
 use beacon::{
-    run_phase_a_regtest, run_phase_b_regtest, ClaimMini, ClaimMiniBackend, EvaluationResult,
-    GarbledSnarkBackend, PhaseAFlow, PhaseBFlow, RegtestOutcome,
+    run_phase_a_regtest, run_phase_b_regtest, run_phase_c_regtest, ClaimMini, ClaimMiniBackend,
+    EvaluationResult, GarbledSnarkBackend, PhaseAFlow, PhaseBFlow, PhaseCFlow, RegtestOutcome,
+    ShareBundle,
 };
 use secp256k1::{Keypair, Secp256k1};
 use std::env;
@@ -23,18 +26,27 @@ fn main() {
     let cheat = args.iter().any(|a| a == "--cheat");
     let use_gsv = args.iter().any(|a| a == "--gsv");
     let adaptor = args.iter().any(|a| a == "--adaptor");
+    let phase_c = args.iter().any(|a| a == "--phase-c");
     let regtest = args.iter().any(|a| a == "--regtest");
 
-    let phase = if adaptor { "B (adaptor)" } else { "A (direct seed)" };
+    let phase = if phase_c {
+        "C (VSSS + Evaluate)"
+    } else if adaptor {
+        "B (adaptor)"
+    } else {
+        "A (direct seed)"
+    };
     println!("=== Beacon Phase {phase} Driver ===\n");
 
     if regtest {
-        if use_gsv {
+        if use_gsv && !phase_c {
             eprintln!(
                 "note: --regtest currently uses ClaimMiniBackend (on-chain path is backend-agnostic)"
             );
         }
-        let result = if adaptor {
+        let result = if phase_c {
+            run_phase_c_regtest(cheat)
+        } else if adaptor {
             run_phase_b_regtest(cheat)
         } else {
             run_phase_a_regtest(cheat)
@@ -81,7 +93,9 @@ fn main() {
         println!("Engine is honest");
     }
 
-    if adaptor {
+    if phase_c {
+        run_sim_c(&claim);
+    } else if adaptor {
         if use_gsv {
             run_sim_b(PhaseBFlow::new(GarbledSnarkBackend), &claim);
         } else {
@@ -146,6 +160,38 @@ fn run_sim_b<B: beacon::CircuitBackend<Claim = ClaimMini>>(flow: PhaseBFlow<B>, 
             println!("L_invalid: {}", hex::encode(l_invalid));
             let _disprove =
                 PhaseBFlow::<B>::build_disprove("assert_txid:0", l_invalid, "slash_addr");
+            println!("Challenger can now broadcast Disprove");
+        }
+    }
+    println!("\n=== Done ===");
+}
+
+fn run_sim_c(claim: &ClaimMini) {
+    let bundle = ShareBundle::synthetic_from_adaptor_secret(&[0xC3; 32]);
+    let flow = PhaseCFlow::with_share_bundle(bundle);
+    println!("mode={}", flow.name());
+
+    let secp = Secp256k1::new();
+    let signer = Keypair::new(&secp, &mut rand::thread_rng());
+    let (_assert_tmpl, opening, h_l_invalid) = flow
+        .engine_create_assert(claim, "funding:txid:0", &signer)
+        .expect("phase-c assert");
+
+    let labels = opening.derive_label_material().expect("extract labels");
+    println!("H(L_invalid): {}", hex::encode(h_l_invalid));
+    println!("Adaptor point T: {}", hex::encode(opening.adaptor_point));
+    println!("Adaptor label material: {}", hex::encode(labels));
+
+    println!("\n--- Challenger: reconstruct + garbled Evaluate ---");
+    match flow.challenger_evaluate(claim, &opening, &h_l_invalid) {
+        EvaluationResult::Valid => {
+            println!("Result: VALID – Engine can Timeout later");
+            let _timeout = PhaseCFlow::build_timeout("assert_txid:0", "reserve:0", "engine_pk");
+        }
+        EvaluationResult::Invalid { l_invalid } => {
+            println!("Result: INVALID");
+            println!("L_invalid: {}", hex::encode(l_invalid));
+            let _disprove = PhaseCFlow::build_disprove("assert_txid:0", l_invalid, "slash_addr");
             println!("Challenger can now broadcast Disprove");
         }
     }

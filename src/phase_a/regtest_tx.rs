@@ -158,6 +158,34 @@ pub fn build_assert_tx_with_opening(
     })
 }
 
+/// Build Assert with a caller-supplied opening (Phase C binds `h_l_invalid` to it).
+pub fn build_assert_tx_with_assert_opening(
+    funding_outpoint: OutPoint,
+    funding_amount: Amount,
+    engine_keypair: &Keypair,
+    h_l_invalid: [u8; 32],
+    connector_amount: Amount,
+    change_address: &Address,
+    dispute_window: u32,
+    fee: Amount,
+    opening: AssertOpening,
+) -> Result<AssertBuildResult, Box<dyn std::error::Error>> {
+    let mut built = build_assert_tx_with_opening(
+        funding_outpoint,
+        funding_amount,
+        engine_keypair,
+        &[],
+        h_l_invalid,
+        connector_amount,
+        change_address,
+        dispute_window,
+        fee,
+        OpeningMode::DirectSeed, // placeholder; overwritten below
+    )?;
+    built.opening = opening;
+    Ok(built)
+}
+
 /// Sign Assert funding input (P2TR key-path, no script merkle root).
 pub fn sign_assert_keypath(
     tx: &mut Transaction,

@@ -46,5 +46,5 @@ cargo run --example phase_a_driver --no-default-features -- --adaptor --regtest 
 
 ## Upgrade path
 
-- **Phase C**: VSSS share reconstruction + full garbled Groth16 Evaluate  
-  (adaptor secret becomes a verified share; same Disprove hashlock)
+- **Phase C**: done (MVP) — see [`16-phase-c-status.md`](16-phase-c-status.md)  
+- **Phase C+**: full garbled Groth16 Evaluate (upstream `gsv_vsss`, not CI)

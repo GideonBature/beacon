@@ -24,6 +24,8 @@ cargo run --example phase_a_driver --no-default-features -- --regtest
 cargo run --example phase_a_driver --no-default-features -- --regtest --cheat
 cargo run --example phase_a_driver --no-default-features -- --adaptor --regtest
 cargo run --example phase_a_driver --no-default-features -- --adaptor --regtest --cheat
+cargo run --example phase_a_driver --no-default-features -- --phase-c --regtest
+cargo run --example phase_a_driver --no-default-features -- --phase-c --regtest --cheat
 ```
 
 

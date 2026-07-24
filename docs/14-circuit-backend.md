@@ -40,7 +40,8 @@ H(L_invalid) = SHA256(L*)
 | Git dependency on upstream GSV | Done |
 | `CircuitBuilder::streaming_execute` smoke circuit | Done |
 | Claim Mini validity → Accept / Disprove | Done |
-| Full garbled Groth16 Garble + Evaluate | **Not yet** (Phase C) |
+| Tiny Garble + Evaluate (Phase C AND) | Done (`phase_c::evaluate`, `--phase-c`) |
+| Full garbled Groth16 Garble + Evaluate | Deferred (Phase C+ / upstream release) |
 
 ## CLI
 
