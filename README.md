@@ -55,7 +55,12 @@ beacon/
 ```bash
 cargo test --workspace
 cargo run -p beacon-mock --example lifecycle
+cargo run -p beacon-mock --example challenge
+cargo run -p beacon-cli -- demo accept
+cargo run -p beacon-cli -- demo reject
 ```
+
+No Cube in this repository. Cube will import Beacon.
 
 **Every commit must leave the project compilable, documented, and testable.**
 

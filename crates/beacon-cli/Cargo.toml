@@ -16,3 +16,6 @@ workspace = true
 
 [dependencies]
 beacon-core = { path = "../beacon-core" }
+beacon-events = { path = "../beacon-events" }
+beacon-mock = { path = "../beacon-mock" }
+clap = { version = "4", features = ["derive"] }
