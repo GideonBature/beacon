@@ -1,36 +1,19 @@
-[workspace]
-resolver = "2"
-members = [
-    "crates/beacon-core",
-    "crates/beacon-events",
-    "crates/beacon-mock",
-    "crates/beacon-cli",
-    "crates/beacon-groth16",
-    "crates/beacon-bitcoin",
-]
-default-members = [
-    "crates/beacon-core",
-    "crates/beacon-events",
-    "crates/beacon-mock",
-    "crates/beacon-cli",
-    "crates/beacon-groth16",
-    "crates/beacon-bitcoin",
-]
-
-[workspace.package]
+[package]
+name = "beacon"
 version = "0.1.0"
 edition = "2021"
+description = "Beacon – BitVM3-style dispute layer for Cube"
 license = "MIT"
-rust-version = "1.75"
-authors = ["Beacon Contributors"]
 
-[workspace.lints.rust]
-unsafe_code = "forbid"
-missing_docs = "warn"
+[[example]]
+name = "phase_a_driver"
+path = "examples/phase_a_driver.rs"
 
-[workspace.lints.clippy]
-all = { level = "warn", priority = -1 }
-pedantic = { level = "warn", priority = -1 }
-module_name_repetitions = "allow"
-missing_errors_doc = "allow"
-missing_panics_doc = "allow"
+[dependencies]
+sha2 = "0.10"
+hex = "0.4"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+bitcoin = { version = "0.32", features = ["rand-std"] }
+secp256k1 = { version = "0.29", features = ["rand-std", "global-context"] }
+rand = "0.8"
