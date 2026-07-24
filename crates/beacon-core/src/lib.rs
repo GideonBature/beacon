@@ -18,10 +18,10 @@ mod state;
 mod time;
 
 pub use assertion::Assertion;
-pub use backend::BackendId;
+pub use backend::{DisputeBackend, Engine};
 pub use challenge::Challenge;
 pub use error::{Error, Result};
-pub use id::{AssertionId, ChallengeId, ChallengerId};
+pub use id::{AssertionId, BackendId, ChallengeId, ChallengerId};
 pub use proof::Verifiable;
 pub use settlement::{Outcome, Settlement};
 pub use state::AssertionState;

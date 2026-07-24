@@ -28,7 +28,6 @@ name = "beacon-mock"
 version = "0.1.0"
 dependencies = [
  "beacon-core",
- "beacon-events",
 ]
 
 [[package]]
