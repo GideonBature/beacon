@@ -1,6 +1,6 @@
 # RFC-0006: Bitcoin Backend
 
-- **Status:** Draft (templates + simulated journal)
+- **Status:** Draft (templates + Assert/Withdraw Script compile)
 - **Depends on:** RFC-0005, RFC-0004
 - **Implementation:** `crates/beacon-bitcoin`
 
@@ -41,9 +41,12 @@ Each [`TxTemplate`](../crates/beacon-bitcoin/src/template.rs) carries:
 Journal entries also include deterministic `txid`, optional `locktime`, and
 `prev_txid`.
 
-`ScriptIntent` is the seam where real Taproot / CSV / CLTV / hashlock Script
-(and later BitVM3-style secrets) will plug in — without changing
-`DisputeBackend`.
+`ScriptIntent` is compiled by [`compile`](../crates/beacon-bitcoin/src/compile.rs)
+for **Assert** and **Withdraw** into real `bitcoin` crate `Script` /
+`Transaction` skeletons (OP_RETURN commit + CLTV placeholders). Challenge /
+Disprove / Punish compilation is still `UnsupportedIntent`.
+
+No broadcasting, wallet, or BitVM3 yet.
 
 ## Non-goals (still)
 
@@ -64,7 +67,9 @@ Journal entries also include deterministic `txid`, optional `locktime`, and
 
 ## Open
 
-- Compile templates to concrete Taproot scripts / PSBTs
+- Challenge / Disprove / Punish Script policies (beyond `UnsupportedIntent`)
+- Replace placeholders (`OP_TRUE`, raw CLTV) with Taproot / keyed spends
 - Replace mock `check()` with on-chain-enforceable dispute artifacts
 - Async challenge resolution (separate Challenge vs Disprove broadcasts)
 - Bond economics beyond `value_sats` placeholders
+- Broadcast / wallet / PSBT path

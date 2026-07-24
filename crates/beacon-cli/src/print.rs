@@ -1,6 +1,6 @@
 //! Shared demo printing helpers.
 
-use beacon_bitcoin::SimulatedTx;
+use beacon_bitcoin::{compile_journal, SimulatedTx};
 use beacon_core::Outcome;
 use beacon_events::Event;
 
@@ -65,5 +65,26 @@ pub(crate) fn print_journal(journal: &[SimulatedTx]) {
             tx.locktime,
             tx.prev_txid.map(|p| p.to_string())
         );
+    }
+}
+
+/// Compile Assert/Withdraw templates to Script skeletons; note unsupported intents.
+pub(crate) fn print_compiled(journal: &[SimulatedTx]) {
+    println!("\ncompiled scripts:");
+    for (txid, result) in compile_journal(journal) {
+        match result {
+            Ok(compiled) => {
+                println!(
+                    "  {} {:?}: {} (vins={} vouts={} locktime={:?})",
+                    txid,
+                    compiled.kind,
+                    compiled.script_pubkey,
+                    compiled.tx.input.len(),
+                    compiled.tx.output.len(),
+                    compiled.tx.lock_time
+                );
+            }
+            Err(err) => println!("  {txid}: {err}"),
+        }
     }
 }

@@ -66,6 +66,7 @@ cargo run -p beacon-cli -- demo groth16 reject --bitcoin
 cargo run -p beacon-mock --example lifecycle
 cargo run -p beacon-groth16 --example lifecycle_groth16
 cargo run -p beacon-bitcoin --example groth16_lifecycle
+cargo run -p beacon-bitcoin --example compile_scripts
 ```
 
 No Cube in this repository. Cube will import Beacon.

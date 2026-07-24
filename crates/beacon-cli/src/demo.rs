@@ -8,7 +8,7 @@ use beacon_groth16::{Groth16Statement, VerifyingKeyRegistry};
 use beacon_mock::{MockBackend, MockEvidence};
 use clap::Subcommand;
 
-use crate::print::{print_events, print_journal, print_settlement};
+use crate::print::{print_compiled, print_events, print_journal, print_settlement};
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum DemoCommand {
@@ -166,6 +166,7 @@ fn run_bitcoin(scenario: OutcomeScenario) -> Result<(), String> {
     }
     print_events(engine.backend().events());
     print_journal(engine.backend().journal());
+    print_compiled(engine.backend().journal());
     Ok(())
 }
 
@@ -198,6 +199,7 @@ fn run_groth16(scenario: Groth16Scenario) -> Result<(), String> {
                 print_settlement(settlement.outcome);
                 print_events(engine.backend().events());
                 print_journal(engine.backend().journal());
+                print_compiled(engine.backend().journal());
                 let kinds: Vec<_> = engine.backend().journal().iter().map(|t| t.kind).collect();
                 if kinds != [TxKind::Assert, TxKind::Withdraw] {
                     return Err(format!("unexpected journal: {kinds:?}"));
@@ -247,6 +249,7 @@ fn run_groth16(scenario: Groth16Scenario) -> Result<(), String> {
                 print_settlement(settlement.outcome);
                 print_events(engine.backend().events());
                 print_journal(engine.backend().journal());
+                print_compiled(engine.backend().journal());
             } else {
                 let mut engine = Engine::new(MockBackend::default());
                 let id = engine

@@ -18,13 +18,18 @@
 //!
 //! # What this is not
 //!
-//! - No real Bitcoin transactions, scripts, Taproot, or networking
+//! - No broadcasting, wallets, Taproot key setup, or networking
 //! - No `BitVM3` garbled circuits
 //! - Verification still uses [`Verifiable::check`](beacon_core::Verifiable::check)
 //!   via the embedded [`MockBackend`](beacon_mock::MockBackend)
+//!
+//! Assert / Withdraw templates **do** compile to offline `bitcoin` crate Script /
+//! Transaction skeletons via [`compile`] / [`compile_journal`]. Challenge /
+//! Disprove / Punish remain template-only for now.
 
 #![forbid(unsafe_code)]
 
+mod compile;
 mod template;
 mod tx;
 
@@ -35,6 +40,7 @@ use beacon_core::{
 use beacon_events::{ChallengeResult, Event, RecordingSink};
 use beacon_mock::{AssertionView, MockBackend, MockConfig};
 
+pub use compile::{compile, compile_journal, CompileError, CompiledTx, ASSERT_COMMIT_TAG};
 pub use template::{ScriptIntent, TxTemplate};
 pub use tx::{SimulatedTx, TxKind, Txid};
 

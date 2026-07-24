@@ -14,6 +14,7 @@ workspace = true
 beacon-core = { path = "../beacon-core" }
 beacon-events = { path = "../beacon-events" }
 beacon-mock = { path = "../beacon-mock" }
+bitcoin = { version = "0.32", default-features = false, features = ["std"] }
 sha2 = "0.10"
 
 [dev-dependencies]
