@@ -65,7 +65,7 @@ impl<B: CircuitBackend<Claim = ClaimMini>> PhaseAFlow<B> {
             // Opening mismatch — real systems abort harder; stand-in continues.
         }
 
-        let result = self.backend.evaluate(claim, opening);
+        let result = self.backend.evaluate(claim, opening as &dyn crate::opening::LabelOpening);
         if let EvaluationResult::Invalid { l_invalid } = &result {
             assert_eq!(
                 hashlock_commit(l_invalid),

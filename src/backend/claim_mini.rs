@@ -2,7 +2,7 @@
 
 use super::{hashlock_commit, CircuitBackend, EvaluationResult};
 use crate::claim_mini::{ClaimMini, OutputWire};
-use crate::phase_a::opening::DirectSeedOpening;
+use crate::opening::LabelOpening;
 
 /// Lightweight backend used by Phase A demos and tests.
 #[derive(Clone, Copy, Debug, Default)]
@@ -20,7 +20,7 @@ impl CircuitBackend for ClaimMiniBackend {
         hashlock_commit(&wire.false_label_placeholder)
     }
 
-    fn evaluate(&self, claim: &Self::Claim, _opening: &DirectSeedOpening) -> EvaluationResult {
+    fn evaluate(&self, claim: &Self::Claim, _opening: &dyn LabelOpening) -> EvaluationResult {
         let wire = OutputWire::from_claim(claim);
         if wire.value {
             EvaluationResult::Valid

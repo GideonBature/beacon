@@ -19,6 +19,10 @@ export BEACON_RPC_URL=http://127.0.0.1:18443 BEACON_RPC_USER=beacon BEACON_RPC_P
 cargo run --example phase_a_driver --no-default-features -- --regtest
 cargo run --example phase_a_driver --no-default-features -- --regtest --cheat
 
+# Phase B – Schnorr adaptor opening (same Taproot graph)
+cargo run --example phase_a_driver --no-default-features -- --adaptor
+cargo run --example phase_a_driver --no-default-features -- --adaptor --regtest --cheat
+
 # Optional: GSV-linked backend (git dep; heavier build)
 cargo run --example gsv_link
 cargo run --example phase_a_driver -- --gsv --cheat
@@ -53,7 +57,7 @@ See [`docs/14-circuit-backend.md`](docs/14-circuit-backend.md).
 - [x] Taproot Assert / Disprove / Timeout with real Schnorr signatures
 - [x] Live regtest runner (`--regtest` / `--regtest --cheat`)
 - [x] Real `garbled-snark-verifier` linked via git dependency
-- [ ] Phase B – adaptor signatures
+- [x] Phase B – Schnorr adaptor extractable opening (`--adaptor`)
 - [ ] Phase C – VSSS + full garbled Groth16 Evaluate
 
 ## Docs

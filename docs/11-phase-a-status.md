@@ -31,7 +31,7 @@ cargo run --example phase_a_driver -- --regtest --cheat
 
 ## Upgrade path
 
-- **Phase B**: replace `DirectSeedOpening` with adaptor-signature opening  
+- **Phase B**: done — see [`15-phase-b-status.md`](15-phase-b-status.md) (`AdaptorOpening`)  
 - **Phase C**: VSSS + full garbled Groth16 Evaluate  
 
 Taproot leaves and Disprove / Timeout stay the same.

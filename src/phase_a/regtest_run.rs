@@ -16,11 +16,13 @@ use rand::thread_rng;
 
 use crate::backend::{CircuitBackend, ClaimMiniBackend, EvaluationResult};
 use crate::claim_mini::ClaimMini;
+use crate::opening::AssertOpening;
 use crate::phase_a::flow::{serialize_claim, PhaseAFlow};
 use crate::phase_a::regtest_tx::{
-    build_assert_tx, build_disprove_tx, build_timeout_tx, p2tr_address, sign_assert_keypath,
-    REGTEST_DISPUTE_WINDOW,
+    build_assert_tx_with_opening, build_disprove_tx, build_timeout_tx, p2tr_address,
+    sign_assert_keypath, OpeningMode, REGTEST_DISPUTE_WINDOW,
 };
+use crate::phase_b::flow::PhaseBFlow;
 
 /// Outcome of a regtest Phase A run.
 #[derive(Debug)]
@@ -108,6 +110,18 @@ fn fund_address(
 
 /// Run Assert → Evaluate → Disprove|Timeout on regtest with [`ClaimMiniBackend`].
 pub fn run_phase_a_regtest(cheat: bool) -> Result<RegtestOutcome, Box<dyn std::error::Error>> {
+    run_regtest(cheat, OpeningMode::DirectSeed)
+}
+
+/// Phase B regtest: same Taproot path with adaptor opening.
+pub fn run_phase_b_regtest(cheat: bool) -> Result<RegtestOutcome, Box<dyn std::error::Error>> {
+    run_regtest(cheat, OpeningMode::Adaptor)
+}
+
+fn run_regtest(
+    cheat: bool,
+    opening_mode: OpeningMode,
+) -> Result<RegtestOutcome, Box<dyn std::error::Error>> {
     let rpc = connect_regtest()?;
     for _ in 0..30 {
         if rpc.get_blockchain_info().is_ok() {
@@ -161,13 +175,19 @@ pub fn run_phase_a_regtest(cheat: bool) -> Result<RegtestOutcome, Box<dyn std::e
         println!("regtest: Engine cheating (inflated total_out)");
     }
 
-    let flow = PhaseAFlow::new(ClaimMiniBackend);
     let claim_bytes = serialize_claim(&claim);
-    let h_l_invalid = flow.backend().commit_l_invalid(&claim);
+    let backend = ClaimMiniBackend;
+    let h_l_invalid = backend.commit_l_invalid(&claim);
 
     let fee = Amount::from_sat(1_000);
     let connector_amt = Amount::from_sat(100_000);
-    let mut built = build_assert_tx(
+    let mode_label = match opening_mode {
+        OpeningMode::DirectSeed => "phase-a/direct-seed",
+        OpeningMode::Adaptor => "phase-b/adaptor",
+    };
+    println!("regtest: opening={mode_label}");
+
+    let mut built = build_assert_tx_with_opening(
         funding_outpoint,
         fund_amt,
         &engine_kp,
@@ -177,6 +197,7 @@ pub fn run_phase_a_regtest(cheat: bool) -> Result<RegtestOutcome, Box<dyn std::e
         &engine_addr,
         REGTEST_DISPUTE_WINDOW,
         fee,
+        opening_mode,
     )?;
     sign_assert_keypath(&mut built.tx, &funding_prev, &funding_kp)?;
 
@@ -184,8 +205,14 @@ pub fn run_phase_a_regtest(cheat: bool) -> Result<RegtestOutcome, Box<dyn std::e
     println!("regtest: Assert broadcast {assert_txid}");
     mine(&rpc, 1, &mine_addr)?;
 
-    let opening = built.opening.clone();
-    let eval = flow.challenger_evaluate(&claim, &opening, &built.h_l_invalid);
+    let eval = match &built.opening {
+        AssertOpening::Direct(o) => {
+            PhaseAFlow::new(ClaimMiniBackend).challenger_evaluate(&claim, o, &built.h_l_invalid)
+        }
+        AssertOpening::Adaptor(o) => {
+            PhaseBFlow::new(ClaimMiniBackend).challenger_evaluate(&claim, o, &built.h_l_invalid)
+        }
+    };
     let connector_prev = built.tx.output[built.connector_vout as usize].clone();
 
     match eval {

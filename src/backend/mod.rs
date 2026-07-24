@@ -18,7 +18,7 @@ mod gsv;
 pub use claim_mini::ClaimMiniBackend;
 pub use gsv::GarbledSnarkBackend;
 
-use crate::phase_a::opening::DirectSeedOpening;
+use crate::opening::LabelOpening;
 use sha2::{Digest, Sha256};
 
 /// Result of evaluating an Assert with a [`CircuitBackend`].
@@ -55,5 +55,5 @@ pub trait CircuitBackend {
     ///
     /// On invalid claims, returns [`EvaluationResult::Invalid`] whose
     /// `l_invalid` satisfies `hashlock_commit(l_invalid) == commit_l_invalid(claim)`.
-    fn evaluate(&self, claim: &Self::Claim, opening: &DirectSeedOpening) -> EvaluationResult;
+    fn evaluate(&self, claim: &Self::Claim, opening: &dyn LabelOpening) -> EvaluationResult;
 }

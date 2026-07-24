@@ -8,7 +8,7 @@
 
 use super::{hashlock_commit, CircuitBackend, EvaluationResult};
 use crate::claim_mini::ClaimMini;
-use crate::phase_a::opening::DirectSeedOpening;
+use crate::opening::LabelOpening;
 
 #[cfg(feature = "gsv")]
 mod linked {
@@ -33,8 +33,8 @@ mod linked {
         hasher.finalize().into()
     }
 
-    pub fn evaluate(claim: &ClaimMini, opening: &DirectSeedOpening) -> EvaluationResult {
-        // Recover label material (Phase A seed stand-in for wide labels).
+    pub fn evaluate(claim: &ClaimMini, opening: &dyn LabelOpening) -> EvaluationResult {
+        // Recover label material (seed / adaptor stand-in for wide labels).
         let _labels = opening.derive_label_material();
 
         // Prove the GSV crate is callable: tiny AND circuit via Execute mode.
@@ -115,7 +115,7 @@ mod linked {
         hasher.finalize().into()
     }
 
-    pub fn evaluate(claim: &ClaimMini, opening: &DirectSeedOpening) -> EvaluationResult {
+    pub fn evaluate(claim: &ClaimMini, opening: &dyn LabelOpening) -> EvaluationResult {
         let _ = opening;
         if claim.verify() {
             EvaluationResult::Valid
@@ -154,7 +154,7 @@ impl CircuitBackend for GarbledSnarkBackend {
         hashlock_commit(&linked::l_invalid(claim))
     }
 
-    fn evaluate(&self, claim: &Self::Claim, opening: &DirectSeedOpening) -> EvaluationResult {
+    fn evaluate(&self, claim: &Self::Claim, opening: &dyn LabelOpening) -> EvaluationResult {
         linked::evaluate(claim, opening)
     }
 }
@@ -182,7 +182,10 @@ mod tests {
         claim.total_out = 999;
         let backend = GarbledSnarkBackend;
         let h = backend.commit_l_invalid(&claim);
-        let opening = DirectSeedOpening::from_claim_bytes(0, &claim.preimage());
+        let opening = crate::phase_a::opening::DirectSeedOpening::from_claim_bytes(
+            0,
+            &claim.preimage(),
+        );
         match backend.evaluate(&claim, &opening) {
             EvaluationResult::Invalid { l_invalid } => {
                 assert_eq!(hashlock_commit(&l_invalid), h);

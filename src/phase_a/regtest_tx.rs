@@ -13,8 +13,11 @@ use bitcoin::taproot::{LeafVersion, TapLeafHash, TaprootBuilder, TaprootSpendInf
 use bitcoin::transaction::{OutPoint, Transaction, TxIn, TxOut, Version};
 use bitcoin::{absolute, Address, Amount, Network, Sequence, Txid, Witness};
 
+use crate::opening::AssertOpening;
 use crate::phase_a::opening::DirectSeedOpening;
+use crate::phase_b::opening::AdaptorOpening;
 use crate::tx_templates::DEFAULT_DISPUTE_WINDOW;
+use rand::thread_rng;
 
 /// Short relative lock for regtest demos (mine this many blocks after Assert).
 pub const REGTEST_DISPUTE_WINDOW: u32 = 2;
@@ -25,6 +28,14 @@ const NUMS_H: [u8; 32] = [
     0x07, 0x8a, 0x5a, 0x0f, 0x28, 0xec, 0x96, 0xd5, 0x47, 0xbf, 0xee, 0x9a, 0xce, 0x80, 0x3a, 0xc0,
 ];
 
+/// Which extractable opening to attach to the Assert.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum OpeningMode {
+    #[default]
+    DirectSeed,
+    Adaptor,
+}
+
 /// Everything needed to build and later spend the Assert connector.
 pub struct AssertBuildResult {
     pub tx: Transaction,
@@ -32,7 +43,7 @@ pub struct AssertBuildResult {
     pub connector_amount: Amount,
     pub taproot_spend_info: TaprootSpendInfo,
     pub h_l_invalid: [u8; 32],
-    pub opening: DirectSeedOpening,
+    pub opening: AssertOpening,
     pub dispute_window: u32,
     /// Engine key that can take the Timeout script path.
     pub engine_keypair: Keypair,
@@ -53,6 +64,33 @@ pub fn build_assert_tx(
     change_address: &Address,
     dispute_window: u32,
     fee: Amount,
+) -> Result<AssertBuildResult, Box<dyn std::error::Error>> {
+    build_assert_tx_with_opening(
+        funding_outpoint,
+        funding_amount,
+        engine_keypair,
+        claim_bytes,
+        h_l_invalid,
+        connector_amount,
+        change_address,
+        dispute_window,
+        fee,
+        OpeningMode::DirectSeed,
+    )
+}
+
+/// Build Assert with Phase A (direct seed) or Phase B (adaptor) opening.
+pub fn build_assert_tx_with_opening(
+    funding_outpoint: OutPoint,
+    funding_amount: Amount,
+    engine_keypair: &Keypair,
+    claim_bytes: &[u8],
+    h_l_invalid: [u8; 32],
+    connector_amount: Amount,
+    change_address: &Address,
+    dispute_window: u32,
+    fee: Amount,
+    opening_mode: OpeningMode,
 ) -> Result<AssertBuildResult, Box<dyn std::error::Error>> {
     let secp = Secp256k1::new();
     let disprove_script = disprove_leaf_script(&h_l_invalid)?;
@@ -96,7 +134,17 @@ pub fn build_assert_tx(
         ],
     };
 
-    let opening = DirectSeedOpening::from_claim_bytes(0, claim_bytes);
+    let opening = match opening_mode {
+        OpeningMode::DirectSeed => {
+            AssertOpening::Direct(DirectSeedOpening::from_claim_bytes(0, claim_bytes))
+        }
+        OpeningMode::Adaptor => AssertOpening::Adaptor(AdaptorOpening::create(
+            0,
+            claim_bytes,
+            engine_keypair,
+            &mut thread_rng(),
+        )?),
+    };
 
     Ok(AssertBuildResult {
         tx,

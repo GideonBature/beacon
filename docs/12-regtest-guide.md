@@ -19,9 +19,11 @@ export BEACON_RPC_URL=http://127.0.0.1:18443
 export BEACON_RPC_USER=beacon
 export BEACON_RPC_PASS=beacon
 
-# Phase A Claim Mini does not need GSV (avoids heavy SP1 build-deps)
+# Phase A / B Claim Mini does not need GSV (avoids heavy SP1 build-deps)
 cargo run --example phase_a_driver --no-default-features -- --regtest
 cargo run --example phase_a_driver --no-default-features -- --regtest --cheat
+cargo run --example phase_a_driver --no-default-features -- --adaptor --regtest
+cargo run --example phase_a_driver --no-default-features -- --adaptor --regtest --cheat
 ```
 
 
