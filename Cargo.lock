@@ -346,8 +346,11 @@ dependencies = [
 name = "beacon-cli"
 version = "0.1.0"
 dependencies = [
+ "ark-bn254",
+ "beacon-bitcoin",
  "beacon-core",
  "beacon-events",
+ "beacon-groth16",
  "beacon-mock",
  "clap",
 ]
