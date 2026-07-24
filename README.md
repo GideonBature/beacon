@@ -71,15 +71,23 @@ cargo run --example phase_a_driver --no-default-features -- --adaptor --cheat
 cargo run --example phase_a_driver --no-default-features -- --phase-c --cheat
 ```
 
-### Run all Beacon tests (recommended)
-
-[`contrib/run-tests.sh`](contrib/run-tests.sh) runs the full default matrix: unit tests, `integration_core`, `integration_gsv`, and `integration_gsv_vsss`.
+### Contrib scripts
 
 ```bash
-chmod +x contrib/run-tests.sh   # once
+chmod +x contrib/*.sh   # once
+```
+
+| Script | What it does | Typical time |
+|--------|----------------|--------------|
+| [`contrib/run-tests.sh`](contrib/run-tests.sh) | Default unit + integration matrix | seconds–couple minutes |
+| [`contrib/run-phase-c-plus.sh`](contrib/run-phase-c-plus.sh) | Full garbled Groth16 honest + cheat | **~15–35+ min per run** at `--k 4` |
+
+#### Fast test matrix
+
+```bash
 ./contrib/run-tests.sh
 
-# Also run #[ignore] suites (Docker regtest + slow Phase C+ Groth16)
+# Also run #[ignore] suites (Docker regtest + slow Phase C+ Groth16 *test*)
 ./contrib/run-tests.sh --with-ignored --release
 ```
 
@@ -90,7 +98,19 @@ chmod +x contrib/run-tests.sh   # once
 | `--release` / `-r` | `cargo test --release` (strongly recommended with `--with-ignored`) |
 | `--help` | Usage |
 
-`CARGO_TARGET_DIR` defaults to `./target` inside the script (SP1 / GSV build-script quirk: the directory name must be `target`).
+#### Phase C+ heavy path (minutes)
+
+Runs the real `phase_c_plus` example in **release** (honest, then cheat):
+
+```bash
+./contrib/run-phase-c-plus.sh                 # --k 4 honest + cheat
+./contrib/run-phase-c-plus.sh --k 6           # heavier
+./contrib/run-phase-c-plus.sh --honest-only
+./contrib/run-phase-c-plus.sh --cheat-only
+./contrib/run-phase-c-plus.sh --with-test     # also ignored integration_gsv C+ test
+```
+
+Both scripts set `CARGO_TARGET_DIR=./target` by default (SP1 / GSV build-script quirk: the directory name must be `target`).
 
 Details and coverage stance: [docs/23-integration-tests.md](docs/23-integration-tests.md).
 
@@ -140,7 +160,13 @@ See [docs/12-regtest-guide.md](docs/12-regtest-guide.md). Bitcoind needs a large
 
 ### GSV / Phase C+ (heavier)
 
-Use a directory literally named `target`:
+Prefer the dedicated runner for the minutes-long Groth16 path:
+
+```bash
+./contrib/run-phase-c-plus.sh
+```
+
+Or manually (directory must be named `target`):
 
 ```bash
 export CARGO_TARGET_DIR=./target
@@ -150,7 +176,6 @@ cargo run --example phase_c_persist --features gsv --no-default-features
 cargo run --example phase_c_cnc --features gsv --no-default-features
 cargo run --example gsv_adaptor --features gsv-vsss --no-default-features
 
-# Full garbled Groth16 (prefer --release; expect many minutes)
 cargo run --release --example phase_c_plus --features gsv --no-default-features -- --k 4
 cargo run --release --example phase_c_plus --features gsv --no-default-features -- --k 4 --cheat
 ```
@@ -219,7 +244,7 @@ Ciphertexts and evaluation sidecars stay **off-chain**; Assert only needs the co
 - [x] Cut-and-choose schedule MVP + Assert `ciphertext_hash`
 - [x] GSV adaptor wire-compat (Fr-share opening tag 3, `gsv-vsss`)
 - [x] C+ eval sidecar + check-set re-garble consistency
-- [x] Integration test suites + `contrib/run-tests.sh`
+- [x] Integration test suites + `contrib/run-tests.sh` / `contrib/run-phase-c-plus.sh`
 - [ ] Mainnet policy for large datacarrier / alternate reveal-tx carrier
 - [ ] Swap DummyCircuit / Claim Mini for **Cube** VK + proofs
 

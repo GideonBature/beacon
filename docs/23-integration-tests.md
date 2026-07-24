@@ -4,7 +4,10 @@ Beacon ships integration crates under `tests/`. Prefer the all-in-one runner:
 
 ```bash
 ./contrib/run-tests.sh                  # default matrix
-./contrib/run-tests.sh --with-ignored --release   # + Docker regtest + C+
+./contrib/run-tests.sh --with-ignored --release   # + Docker regtest + C+ test
+
+# Minutes-long garbled Groth16 (example path, not the fast matrix)
+./contrib/run-phase-c-plus.sh           # honest + cheat at --k 4
 ```
 
 | Suite | Features | What it covers |
