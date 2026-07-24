@@ -1,6 +1,11 @@
 # Integration tests
 
-Beacon ships three integration crates under `tests/`:
+Beacon ships integration crates under `tests/`. Prefer the all-in-one runner:
+
+```bash
+./contrib/run-tests.sh                  # default matrix
+./contrib/run-tests.sh --with-ignored --release   # + Docker regtest + C+
+```
 
 | Suite | Features | What it covers |
 |-------|----------|----------------|
@@ -9,7 +14,7 @@ Beacon ships three integration crates under `tests/`:
 | `integration_gsv_vsss` | `gsv-vsss` | Tag-3 `GsvAdaptorOpening`, Fr extract, ShareBundle, witness round-trip |
 | `integration_regtest` | none | Docker bitcoind Assert → Disprove/Timeout (`#[ignore]`) |
 
-## Commands
+## Commands (manual)
 
 ```bash
 # Default CI-friendly (no GSV link)
