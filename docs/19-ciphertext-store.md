@@ -52,9 +52,9 @@ cargo run --example phase_c_persist --features gsv --no-default-features
 
 - Schedule MVP: [`20-cut-and-choose-schedule.md`](20-cut-and-choose-schedule.md)
 - Assert optional `ciphertext_hash`: [`18-assert-witness.md`](18-assert-witness.md)
+- Eval sidecar + check-set re-garble: [`22-eval-sidecar.md`](22-eval-sidecar.md)
 
 ## Still open
 
-- Serialize C+ proof/VK/input wires as sidecar (today still in `Groth16AssertBundle` RAM)
-- Re-garble consistency checks for check-set openings
-- Wire GSV `AdaptorInfo` / full VSSS C&C protocol
+- Full VSSS / wide-label C&C (beyond hash re-garble of toy AND)
+- Wire GSV `AdaptorInfo` multi-adaptor (`WideAdaptorInfo`)

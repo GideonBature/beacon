@@ -38,6 +38,12 @@ pub struct CiphertextMeta {
     pub l_valid: [u8; 32],
     /// Relative filename under the store root (e.g. `gc_0.bin`).
     pub stream_file: String,
+    /// Optional Phase C+ eval sidecar (`gc_{id}.eval.bin`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sidecar_file: Option<String>,
+    /// SHA256 of the sidecar bytes (when present).
+    #[serde(default, skip_serializing_if = "Option::is_none", with = "hex32_opt")]
+    pub sidecar_hash: Option<[u8; 32]>,
 }
 
 #[derive(Debug)]
@@ -51,6 +57,12 @@ pub enum StoreError {
         got: [u8; 32],
     },
     BadMeta(&'static str),
+    SidecarMissing(u32),
+    SidecarHashMismatch {
+        instance_id: u32,
+        expected: [u8; 32],
+        got: [u8; 32],
+    },
 }
 
 impl std::fmt::Display for StoreError {
@@ -70,6 +82,19 @@ impl std::fmt::Display for StoreError {
                 hex::encode(got)
             ),
             Self::BadMeta(m) => write!(f, "ciphertext store: bad meta ({m})"),
+            Self::SidecarMissing(id) => {
+                write!(f, "ciphertext store: sidecar missing for instance {id}")
+            }
+            Self::SidecarHashMismatch {
+                instance_id,
+                expected,
+                got,
+            } => write!(
+                f,
+                "ciphertext store: instance {instance_id} sidecar hash mismatch expected={} got={}",
+                hex::encode(expected),
+                hex::encode(got)
+            ),
         }
     }
 }
@@ -169,9 +194,54 @@ impl CiphertextStore {
             l_invalid,
             l_valid,
             stream_file,
+            sidecar_file: None,
+            sidecar_hash: None,
         };
         self.write_meta(&meta)?;
         Ok(meta)
+    }
+
+    pub fn sidecar_path(&self, instance_id: u32) -> PathBuf {
+        self.root.join(format!("gc_{instance_id}.eval.bin"))
+    }
+
+    /// Write raw sidecar bytes and return SHA256.
+    pub fn write_sidecar_bytes(
+        &self,
+        instance_id: u32,
+        bytes: &[u8],
+    ) -> Result<([u8; 32], String), StoreError> {
+        let sidecar_file = format!("gc_{instance_id}.eval.bin");
+        let path = self.root.join(&sidecar_file);
+        let tmp = path.with_extension("eval.bin.tmp");
+        fs::write(&tmp, bytes)?;
+        fs::rename(&tmp, &path)?;
+        Ok((sha256_bytes(bytes), sidecar_file))
+    }
+
+    /// Load sidecar bytes and verify against meta (when meta lists a sidecar).
+    pub fn open_sidecar_verified(
+        &self,
+        meta: &CiphertextMeta,
+    ) -> Result<Vec<u8>, StoreError> {
+        let (file, expected) = match (&meta.sidecar_file, &meta.sidecar_hash) {
+            (Some(f), Some(h)) => (f.clone(), *h),
+            _ => return Err(StoreError::SidecarMissing(meta.instance_id)),
+        };
+        let path = self.root.join(file);
+        if !path.exists() {
+            return Err(StoreError::SidecarMissing(meta.instance_id));
+        }
+        let bytes = fs::read(&path)?;
+        let got = sha256_bytes(&bytes);
+        if got != expected {
+            return Err(StoreError::SidecarHashMismatch {
+                instance_id: meta.instance_id,
+                expected,
+                got,
+            });
+        }
+        Ok(bytes)
     }
 
     /// Load meta and verify the stream file matches `ciphertext_hash`.
@@ -227,6 +297,10 @@ fn sha256_file(path: &Path) -> Result<[u8; 32], StoreError> {
     Ok(hasher.finalize().into())
 }
 
+pub(crate) fn sha256_bytes(data: &[u8]) -> [u8; 32] {
+    Sha256::digest(data).into()
+}
+
 #[cfg(feature = "gsv")]
 fn blake3_accum_file(path: &Path) -> Result<[u8; 32], StoreError> {
     use garbled_snark_verifier::circuit::ciphertext_source::{CiphertextSource, FileSource};
@@ -251,6 +325,33 @@ mod hex32 {
         let mut a = [0u8; 32];
         a.copy_from_slice(&bytes);
         Ok(a)
+    }
+}
+
+mod hex32_opt {
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S: Serializer>(v: &Option<[u8; 32]>, s: S) -> Result<S::Ok, S::Error> {
+        match v {
+            Some(h) => s.serialize_some(&hex::encode(h)),
+            None => s.serialize_none(),
+        }
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Option<[u8; 32]>, D::Error> {
+        let opt = Option::<String>::deserialize(d)?;
+        match opt {
+            None => Ok(None),
+            Some(s) => {
+                let bytes = hex::decode(&s).map_err(serde::de::Error::custom)?;
+                if bytes.len() != 32 {
+                    return Err(serde::de::Error::custom("expected 32 bytes"));
+                }
+                let mut a = [0u8; 32];
+                a.copy_from_slice(&bytes);
+                Ok(Some(a))
+            }
+        }
     }
 }
 

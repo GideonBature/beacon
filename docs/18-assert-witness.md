@@ -38,10 +38,12 @@ MAGIC "BEAC" | FORMAT_V1=1
 | protocol_version u8 | instance_id u32 LE
 | public_inputs_hash[32] | claim_id[32] | h_l_invalid[32]
 | claim_bytes (u32 LE length + bytes)
-| opening_tag (1=direct | 2=adaptor) + opening fields
+| opening_tag (1=direct | 2=adaptor | 3=gsv-adaptor*) + opening fields
 | share_flag (0|1) + optional ShareBundle
 | ct_hash_flag (0|1) + optional ciphertext_hash[32]   // eval instance a
 ```
+
+\* Tag 3 requires `--features gsv-vsss` — see [`21-gsv-adaptor-wire.md`](21-gsv-adaptor-wire.md).
 
 `ciphertext_hash` binds the off-chain garbled stream for `instance_id`
 ([`CiphertextStore`](19-ciphertext-store.md)). Older blobs without the trailing

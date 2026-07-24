@@ -161,6 +161,8 @@ pub fn garble_and_to_store(
         l_invalid,
         l_valid,
         stream_file: format!("gc_{instance_id}.bin"),
+        sidecar_file: None,
+        sidecar_hash: None,
     };
     store.write_meta(&meta)?;
 
@@ -279,6 +281,45 @@ pub fn evaluate_and_from_store(
     }
 }
 
+/// Re-garble check-set instances and confirm CT hashes match the store (C&C open).
+///
+/// Deterministic: same seed → same Blake3-accumulating ciphertext hash.
+pub fn verify_check_regarble(
+    store: &CiphertextStore,
+    openings: &[crate::phase_c::schedule::CheckOpening],
+) -> Result<(), StoreError> {
+    for op in openings {
+        let meta = store.load_meta(op.instance_id)?;
+        if meta.seed != op.seed {
+            return Err(StoreError::BadMeta("check opening seed ≠ meta"));
+        }
+        store.verify(op.instance_id)?;
+        let recomputed = recompute_and_ciphertext_hash(meta.seed);
+        if recomputed != meta.ciphertext_hash {
+            return Err(StoreError::HashMismatch {
+                instance_id: op.instance_id,
+                expected: meta.ciphertext_hash,
+                got: recomputed,
+            });
+        }
+    }
+    Ok(())
+}
+
+fn recompute_and_ciphertext_hash(seed: u64) -> [u8; 32] {
+    use garbled_snark_verifier::ciphertext_hasher::Blake3AccumulatingHash;
+    let mut rng = ChaChaRng::seed_from_u64(seed);
+    let delta = Delta::generate(&mut rng);
+    let inputs = GarbleInputs {
+        flag: GarbledWire::random(&mut rng, &delta),
+        one: GarbledWire::random(&mut rng, &delta),
+    };
+    let hasher = Blake3AccumulatingHash::default();
+    let result: StreamingResult<GarbleMode<Blake3Hasher, _>, _, Vec<GarbledWire>> =
+        CircuitBuilder::streaming_garbling(inputs, 64, seed, hasher, circuit_fn);
+    result.ciphertext_handler_result
+}
+
 mod hex_bytes {
     use serde::{Deserialize, Deserializer, Serializer};
 
@@ -344,6 +385,29 @@ mod tests {
             EvaluationResult::Valid => panic!("expected invalid"),
         }
 
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn check_set_regarble_matches_store() {
+        use crate::phase_c::schedule::{
+            check_openings_from_store, fixed_schedule, CutAndChooseParams,
+        };
+        let dir = std::env::temp_dir().join(format!(
+            "beacon-regarble-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        let store = CiphertextStore::open(&dir).unwrap();
+        let params = CutAndChooseParams::default();
+        let schedule = fixed_schedule(params).unwrap();
+        for i in 0..params.n {
+            let material =
+                DirectSeedOpening::from_claim_bytes(i, b"regarble").derive_label_material();
+            garble_and_to_store(&store, i, &material).unwrap();
+        }
+        let openings = check_openings_from_store(&store, &schedule).unwrap();
+        verify_check_regarble(&store, &openings).unwrap();
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

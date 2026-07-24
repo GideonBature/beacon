@@ -32,6 +32,7 @@ use crate::phase_c::ciphertext_store::{
     CiphertextMeta, CiphertextStore, StoreError, HASH_ALG_BLAKE3_ACCUM, META_FORMAT_V1,
 };
 use crate::phase_c::labels::{expand_label_bytes, seed_from_label_material};
+use crate::phase_c::sidecar::{self, Groth16EvalSidecar};
 
 /// Live-wire capacity for the Groth16 verifier gadget (upstream default).
 pub const GROTH16_CAPACITY: usize = 150_000;
@@ -149,7 +150,7 @@ pub fn setup_garble_to_store(
             garbled_groth16::verify,
         );
     let bundle = bundle_from_result(proven, garbling_result);
-    let meta = CiphertextMeta {
+    let mut meta = CiphertextMeta {
         format: META_FORMAT_V1,
         instance_id,
         ciphertext_hash: bundle.ciphertext_hash,
@@ -160,10 +161,15 @@ pub fn setup_garble_to_store(
         l_invalid: bundle.l_invalid,
         l_valid: bundle.l_valid,
         stream_file: format!("gc_{instance_id}.bin"),
+        sidecar_file: None,
+        sidecar_hash: None,
     };
     store
         .write_meta(&meta)
         .map_err(|e| format!("ciphertext meta: {e}"))?;
+    let side = Groth16EvalSidecar::from_bundle(&bundle);
+    sidecar::write_sidecar(store, instance_id, &side, &mut meta)
+        .map_err(|e| format!("eval sidecar: {e}"))?;
     Ok((bundle, meta))
 }
 
@@ -265,7 +271,7 @@ pub fn evaluate_bundle(bundle: &Groth16AssertBundle) -> Result<EvaluationResult,
 
 /// Evaluate using a previously persisted CT stream (no re-garble).
 ///
-/// Still needs proof / VK / input wires from `bundle` (sidecar serialization later).
+/// Prefer [`evaluate_from_store`] when the eval sidecar was written at setup.
 pub fn evaluate_bundle_from_store(
     store: &CiphertextStore,
     instance_id: u32,
@@ -277,14 +283,33 @@ pub fn evaluate_bundle_from_store(
     if meta.ciphertext_hash != bundle.ciphertext_hash {
         return Err("store ciphertext_hash ≠ bundle".into());
     }
+    evaluate_with_stream(bundle, stream_path, bundle.ciphertext_hash)
+}
 
+/// Load meta + eval sidecar + CT from disk, then Evaluate (no Engine RAM bundle).
+pub fn evaluate_from_store(
+    store: &CiphertextStore,
+    instance_id: u32,
+) -> Result<EvaluationResult, String> {
+    let bundle = sidecar::bundle_from_store(store, instance_id)
+        .map_err(|e: StoreError| e.to_string())?;
+    let (_meta, stream_path) = store
+        .open_verified(instance_id)
+        .map_err(|e: StoreError| e.to_string())?;
+    evaluate_with_stream(&bundle, stream_path, bundle.ciphertext_hash)
+}
+
+fn evaluate_with_stream(
+    bundle: &Groth16AssertBundle,
+    stream_path: std::path::PathBuf,
+    expected: [u8; 32],
+) -> Result<EvaluationResult, String> {
     let gate_hasher = {
         let mut rng = rand_chacha::ChaChaRng::seed_from_u64(bundle.seed);
         Blake3Hasher::from_rng(&mut rng)
     };
 
     let (tx, rx) = channel::unbounded();
-    let expected = bundle.ciphertext_hash;
     let feeder = thread::spawn(move || -> Result<[u8; 32], ()> {
         let mut src = FileSource::from_path(stream_path).map_err(|_| ())?;
         while let Some(ct) = src.recv() {

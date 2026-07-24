@@ -43,9 +43,15 @@ export CARGO_TARGET_DIR=./target
 cargo run --example phase_c_cnc --features gsv --no-default-features
 ```
 
+## Check-set re-garble
+
+`verify_check_regarble` (Phase C AND) re-garbles each opened check instance from
+`meta.seed` and checks the Blake3-accumulating CT hash. See
+[`22-eval-sidecar.md`](22-eval-sidecar.md).
+
 ## Not in this MVP
 
-- Re-garble consistency of check-set (seed → regenerate Commit₁)
+- Full Commit₁ label-commit reopen (beyond CT hash)
 - `f > 1` multi-eval Assert policy
-- VSSS wide labels / GSV `AdaptorInfo`
+- VSSS wide labels / `WideAdaptorInfo`
 - Putting check openings on-chain

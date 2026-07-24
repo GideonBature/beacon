@@ -58,7 +58,8 @@ Use `--k 4` for a quicker smoke; gate count of the *verifier gadget* still domin
 ## What is still not production Cube
 
 - Proof is over `DummyCircuit`, not CubeVM state transitions  
-- CT can be persisted (`setup_garble_to_store`); proof/VK sidecar serialization still open  
+- CT + eval sidecar persisted (`setup_garble_to_store` / `evaluate_from_store`)  
+
 
 - Multi-instance VSSS C&C (~11B gates / ~43 GB) remains upstream `gsv_vsss`  
 - GSV `AdaptorInfo` (k256 / Fr shares) is not wire-compatible with Phase B yet  

@@ -1,7 +1,10 @@
-//! Extractable Assert openings (Phase A direct seed, Phase B adaptor).
+//! Extractable Assert openings (Phase A direct seed, Phase B adaptor, GSV Fr).
 
 use crate::phase_a::opening::DirectSeedOpening;
 use crate::phase_b::opening::AdaptorOpening;
+
+#[cfg(feature = "gsv-vsss")]
+use crate::phase_b::gsv_adaptor::GsvAdaptorOpening;
 
 /// Common interface for recovering label material from an Assert opening.
 pub trait LabelOpening {
@@ -49,11 +52,33 @@ impl LabelOpening for AdaptorOpening {
     }
 }
 
+#[cfg(feature = "gsv-vsss")]
+impl LabelOpening for GsvAdaptorOpening {
+    fn version(&self) -> u8 {
+        self.version
+    }
+
+    fn instance_id(&self) -> u32 {
+        self.instance_id
+    }
+
+    fn public_inputs_hash(&self) -> [u8; 32] {
+        self.public_inputs_hash
+    }
+
+    fn derive_label_material(&self) -> [u8; 32] {
+        GsvAdaptorOpening::derive_label_material(self)
+            .expect("gsv adaptor opening must extract cleanly")
+    }
+}
+
 /// Opening carried alongside an Assert (witness interpretation).
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum AssertOpening {
     Direct(DirectSeedOpening),
     Adaptor(AdaptorOpening),
+    #[cfg(feature = "gsv-vsss")]
+    GsvAdaptor(GsvAdaptorOpening),
 }
 
 impl AssertOpening {
@@ -61,6 +86,8 @@ impl AssertOpening {
         match self {
             Self::Direct(o) => o,
             Self::Adaptor(o) => o,
+            #[cfg(feature = "gsv-vsss")]
+            Self::GsvAdaptor(o) => o,
         }
     }
 }

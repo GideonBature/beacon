@@ -312,6 +312,10 @@ fn run_regtest(
             o,
             &recovered.statement.h_l_invalid,
         ),
+        #[cfg(feature = "gsv-vsss")]
+        (AssertOpening::GsvAdaptor(_), _) => {
+            return Err("regtest driver does not yet run GsvAdaptor openings".into());
+        }
     };
     let connector_prev = built.tx.output[built.connector_vout as usize].clone();
 

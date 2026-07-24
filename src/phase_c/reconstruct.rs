@@ -44,7 +44,8 @@ impl ShareBundle {
 /// Reconstruct the evaluation seed / wide-label material.
 ///
 /// `adaptor_share` is the 32-byte secret recovered from the Phase B opening
-/// (stand-in for a VSSS Fr share).
+/// (stand-in for a VSSS Fr share). For GSV Fr shares use
+/// [`adaptor_share_from_gsv_fr_be`] first when feeding the lagrange path.
 #[must_use]
 pub fn reconstruct_label_seed(
     bundle: Option<&ShareBundle>,
@@ -54,6 +55,21 @@ pub fn reconstruct_label_seed(
         None => *adaptor_share,
         Some(b) => linked::reconstruct(b, adaptor_share),
     }
+}
+
+/// Convert a GSV adaptor Fr share (**big-endian**) to the little-endian
+/// 32-byte form expected by [`ShareBundle`] / `gsv-vsss` lagrange reconstruct.
+#[cfg(feature = "gsv-vsss")]
+#[must_use]
+pub fn adaptor_share_from_gsv_fr_be(fr_be: &[u8; 32]) -> [u8; 32] {
+    use ark_ff::{BigInteger, PrimeField};
+    use ark_secp256k1::Fr;
+    let fr = Fr::from_be_bytes_mod_order(fr_be);
+    let mut out = [0u8; 32];
+    let bytes = fr.into_bigint().to_bytes_le();
+    let n = bytes.len().min(32);
+    out[..n].copy_from_slice(&bytes[..n]);
+    out
 }
 
 #[cfg(feature = "gsv-vsss")]

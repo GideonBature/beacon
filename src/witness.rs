@@ -14,6 +14,9 @@ use crate::phase_b::opening::AdaptorOpening;
 use crate::phase_c::reconstruct::ShareBundle;
 use sha2::{Digest, Sha256};
 
+#[cfg(feature = "gsv-vsss")]
+use crate::phase_b::gsv_adaptor::GsvAdaptorOpening;
+
 /// Magic prefix: Beacon Assert Compact.
 pub const MAGIC: &[u8; 4] = b"BEAC";
 /// Wire format version of this packing (not Phase A/B opening version).
@@ -21,6 +24,8 @@ pub const FORMAT_V1: u8 = 1;
 
 const OPENING_DIRECT: u8 = 1;
 const OPENING_ADAPTOR: u8 = 2;
+#[cfg(feature = "gsv-vsss")]
+const OPENING_GSV_ADAPTOR: u8 = 3;
 
 /// Public statement always visible with the Assert (Cube whitepaper: asserted claim).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -146,6 +151,11 @@ impl AssertWitnessV1 {
                 out.extend_from_slice(&o.message);
                 out.extend_from_slice(&o.public_inputs_hash);
             }
+            #[cfg(feature = "gsv-vsss")]
+            AssertOpening::GsvAdaptor(o) => {
+                out.push(OPENING_GSV_ADAPTOR);
+                out.extend_from_slice(&o.encode_fields());
+            }
         }
         match &self.share_bundle {
             None => out.push(0),
@@ -210,6 +220,16 @@ impl AssertWitnessV1 {
                     message: c.read_array32()?,
                     public_inputs_hash: c.read_array32()?,
                 })
+            }
+            #[cfg(feature = "gsv-vsss")]
+            OPENING_GSV_ADAPTOR => {
+                // Remaining opening fields until share_flag: version..completed_sig.
+                // Layout size is fixed — read exact field blob.
+                const GSV_FIELDS_LEN: usize = 1 + 4 + 32 + 32 + 32 + 33 + 33 + 32 + 64;
+                let fields = c.read_exact(GSV_FIELDS_LEN)?;
+                let o = GsvAdaptorOpening::decode_fields(fields)
+                    .map_err(|_| WitnessError::BadFormat)?;
+                AssertOpening::GsvAdaptor(o)
             }
             t => return Err(WitnessError::BadOpeningTag(t)),
         };
@@ -511,6 +531,31 @@ mod tests {
             AssertWitnessV1::decode(&w.encode()),
             Err(WitnessError::ClaimHashMismatch)
         ));
+    }
+
+    #[cfg(feature = "gsv-vsss")]
+    #[test]
+    fn roundtrip_gsv_adaptor() {
+        use ark_ff::UniformRand;
+        use ark_secp256k1::Fr;
+        use rand::thread_rng;
+        let claim_bytes = sample_claim_bytes();
+        let mut rng = thread_rng();
+        let evaluator = Fr::rand(&mut rng);
+        let garbler = Fr::rand(&mut rng);
+        let opening =
+            GsvAdaptorOpening::create(2, &claim_bytes, &evaluator, &garbler, &mut rng).unwrap();
+        let w = AssertWitnessV1::new(
+            claim_bytes,
+            AssertOpening::GsvAdaptor(opening),
+            [0x33; 32],
+            None,
+        );
+        let dec = AssertWitnessV1::decode(&w.encode()).unwrap();
+        match dec.opening {
+            AssertOpening::GsvAdaptor(o) => assert_eq!(o.extract_fr().unwrap(), garbler),
+            _ => panic!("expected GsvAdaptor"),
+        }
     }
 
     #[test]

@@ -115,7 +115,7 @@ H(L_invalid) = SHA256(L*)     # Disprove leaf: OP_SHA256 <H> OP_EQUALVERIFY
 |---------|---------|
 | *(default `gsv`)* | Link garbled-snark-verifier (GPL-3.0-only) |
 | `--no-default-features` | Fast Claim Mini / regtest without GSV |
-| `gsv-vsss` | Upstream VSSS lagrange reconstruct |
+| `gsv-vsss` | Upstream VSSS lagrange + GSV Fr-share adaptor (tag 3) |
 | `gsv-groth16` | Alias for Phase C+ (`gsv`) |
 
 ## Roadmap
@@ -127,9 +127,9 @@ H(L_invalid) = SHA256(L*)     # Disprove leaf: OP_SHA256 <H> OP_EQUALVERIFY
 - [x] Assert witness packing v1 (OP_RETURN + chain round-trip)
 - [x] Ciphertext store MVP (disk CT + hash verify + Evaluate-from-store)
 - [x] Cut-and-choose schedule MVP + Assert `ciphertext_hash`
+- [x] GSV adaptor wire-compat (Fr-share opening tag 3, `gsv-vsss`)
+- [x] C+ eval sidecar + check-set re-garble consistency
 - [ ] Mainnet policy for large datacarrier / alternate reveal-tx carrier
-- [ ] C+ proof/VK sidecar + check-set re-garble consistency
-- [ ] Wire GSV `AdaptorInfo` (Fr shares) to Beacon opening
 - [ ] Swap DummyCircuit / Claim Mini for **Cube** VK + proofs
 
 ## Docs
@@ -144,6 +144,8 @@ H(L_invalid) = SHA256(L*)     # Disprove leaf: OP_SHA256 <H> OP_EQUALVERIFY
 | [`docs/18-assert-witness.md`](docs/18-assert-witness.md) | Assert witness packing + Cube alignment |
 | [`docs/19-ciphertext-store.md`](docs/19-ciphertext-store.md) | Off-chain CT persist |
 | [`docs/20-cut-and-choose-schedule.md`](docs/20-cut-and-choose-schedule.md) | C&C schedule + Assert CT hash |
+| [`docs/21-gsv-adaptor-wire.md`](docs/21-gsv-adaptor-wire.md) | GSV Fr-share adaptor (tag 3) |
+| [`docs/22-eval-sidecar.md`](docs/22-eval-sidecar.md) | C+ sidecar + check-set re-garble |
 | [`docs/12-regtest-guide.md`](docs/12-regtest-guide.md) | Docker / bitcoind |
 | [`docs/14-circuit-backend.md`](docs/14-circuit-backend.md) | Backends + GSV |
 

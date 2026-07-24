@@ -36,7 +36,7 @@ pub use phase_b::flow::PhaseBFlow;
 pub use phase_b::opening::AdaptorOpening;
 pub use phase_c::ciphertext_store::{CiphertextMeta, CiphertextStore, StoreError};
 pub use phase_c::flow::PhaseCFlow;
-pub use phase_c::reconstruct::ShareBundle;
+pub use phase_c::reconstruct::{reconstruct_label_seed, ShareBundle};
 pub use phase_c::schedule::{
     check_openings_from_store, commits_from_store, fixed_schedule, open_check_instances,
     require_eval_committed, sample_schedule, CheckOpening, CutAndChooseParams,
@@ -50,7 +50,13 @@ pub use witness::{
 
 #[cfg(feature = "gsv")]
 pub use phase_c::{
-    evaluate_and_from_store, evaluate_bundle_from_store, garble_and_to_store, load_and_package,
-    setup_garble_to_store, AndEvalPackage, Groth16AssertBundle, PhaseCPlusAssert, PhaseCPlusFlow,
-    DEFAULT_K, GROTH16_CAPACITY,
+    evaluate_and_from_store, evaluate_bundle_from_store, evaluate_from_store, garble_and_to_store,
+    load_and_package, load_sidecar, setup_garble_to_store, verify_check_regarble, AndEvalPackage,
+    Groth16AssertBundle, Groth16EvalSidecar, PhaseCPlusAssert, PhaseCPlusFlow, DEFAULT_K,
+    GROTH16_CAPACITY,
 };
+
+#[cfg(feature = "gsv-vsss")]
+pub use phase_b::gsv_adaptor::{GsvAdaptorOpening, VERSION_GSV_ADAPTOR};
+#[cfg(feature = "gsv-vsss")]
+pub use phase_c::adaptor_share_from_gsv_fr_be;
